@@ -331,9 +331,11 @@ def test_payroll_migration_matches_metadata_and_retains_history():
     from bookflow.company import schema as c
     from tests.test_docs_schema_metadata import _metadata_shape, _database_shape
     migration = importlib.import_module('bookflow.storage.company_migrations.versions.0130_payroll_drafts')
+    # Increment 2 (co0136) keeps the directive a revision was saved under, privately.
+    later = importlib.import_module('bookflow.storage.company_migrations.versions.0136_payroll_posting')
     engine = sa.create_engine('sqlite://')
     with engine.connect() as connection:
-        for statement in migration.DDL + migration.TRIGGERS:
+        for statement in migration.DDL + migration.TRIGGERS + later.ALTER:
             connection.exec_driver_sql(statement)
         expected = {k: v for k, v in _metadata_shape(c.metadata).items() if k in migration.TABLES}
         assert _database_shape(sa.inspect(connection), connection) == expected

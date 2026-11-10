@@ -86,6 +86,7 @@ ADAPTER_MODULES = {
     'inventory-count': 'count_batch_reversal', 'check-print': 'check_print_batch_reversal',
     'delivery-batch': 'delivery_batch_reversal',
     'approval-commit': 'approval_commit_reversal',
+    'payroll': 'payroll_paychecks',
 }
 
 
@@ -354,6 +355,10 @@ _PEOPLE = 'a person or principal of the hub, never a list record'
 _INTERNAL = "a document's own row or line, never a list record"
 _LEDGER = "the batch and import ledger's own history"
 NOT_REFERENCES: dict[tuple[str, str], str] = {
+    # R116: payroll's private history names who acted and under which directive; never a use of a record.
+    ('payroll_draft_revisions', 'actor_id'): _PEOPLE, ('payroll_draft_revisions', 'directive_id'): 'the audit trail',
+    ('payroll_operations', 'actor_id'): _PEOPLE, ('payroll_paycheck_events', 'actor_id'): _PEOPLE,
+    ('payroll_paycheck_events', 'directive_id'): 'the audit trail',
     ('company_info', 'tax_id'): 'a tax registration number, not a record id',
     ('custom_field_values', 'record_id'): ("the record's own custom-field values (its detail); they change only "
                                            "through the record's own update, which bumps its version"),

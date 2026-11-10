@@ -372,6 +372,8 @@ def _account_refusals(db, merged: dict[str, Any], target: dict[str, Any], ids: d
     m, s = merged["id"], target["id"]
     from bookflow.company.intercompany_account_owner import require_unreserved
     require_unreserved(db, m, s)
+    from bookflow.company.payroll_owner import require_unreserved_account
+    require_unreserved_account(db, m, s)
     if merged["type"] != target["type"]:
         raise _refuse("the two accounts are of different types", merged_type=merged["type"],
                       survivor_type=target["type"], **ids)

@@ -14,3 +14,4 @@ Database: `company`.
 | `reason` | TEXT | no | — | — | — | — | PRIVATE reason supplied for this write. |
 | `actor_id` | VARCHAR(26) | no | — | — | — | — | Acting principal. |
 | `created_at` | VARCHAR(32) | no | — | — | — | — | UTC revision time. |
+| `directive_id` | VARCHAR(26) | yes | — | — | — | — | Directive the revision was saved under, kept privately. |

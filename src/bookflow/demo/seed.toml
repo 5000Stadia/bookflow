@@ -2934,8 +2934,18 @@ input = { employee = "${employee.id}", operation_key = "demo-payroll-p1", period
 
 [[commands]]
 command = "payroll prepare"
+capture = "payroll_p1_ready"
 reason = "Review fictional P1 arithmetic without posting"
 input = { draft = "${payroll_p1.id}", expected_version = "${payroll_p1.version}", operation_key = "demo-payroll-calculate" }
+
+# R116 increment 2: preview posting P1 with its net-pay check (Dr wages 1,000.00 and employer expense 50.00;
+# Cr tax payable 150.00 and net payable 900.00; then Dr net payable / Cr Checking 900.00). A dry run, so the demo
+# books and balances do not change; the switch then returns to off.
+[[commands]]
+command = "payroll post"
+dry_run = true
+reason = "Preview posting the fictional P1 paycheck and its net-pay check without changing balances"
+input = { draft = "${payroll_p1_ready.id}", expected_version = "${payroll_p1_ready.version}", operation_key = "demo-payroll-post", check_account = "Checking", check_number = "9001" }
 
 [[commands]]
 command = "payroll setup"

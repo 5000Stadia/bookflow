@@ -116,7 +116,8 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # + six private payroll calculator commands (R116 increment 1).
     # +7 membership plans and dated enrollments (R188 increment 1).
     # +1 pos commission-options, the till's recipient lookup (R189 increment 2).
-    assert len(rows) == 967  # + batch reverse, notice reverse (R186); +6 purchase-draft create, update, preview, cancel, show, list (R122)
+    # +6 payroll post, pay-net, void, void-payment, paycheck, paychecks (R116 increment 2).
+    assert len(rows) == 973  # + batch reverse, notice reverse (R186); +6 purchase-draft create, update, preview, cancel, show, list (R122)
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -482,7 +483,10 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # invoice, sales-receipt, estimate, proposal, sales-order and work-order create/post/update, batch-invoice post,
     # payment preview items); POS lines' nullable commission and member_commissions on sale preview, complete and
     # ticket hold (+6); pos commission-options 2. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==4746  # R186 trial fixes: batch query date_from and date_to add two nullable inputs. R186: batch reverse fingerprint adds one nullable input; notice reverse adds nullable note and expected_version
+    # R116 increment 2: 9 paths, 4746 -> 4755. payroll post's nullable check_account, check_date, check_number (+3);
+    # pay-net's nullable date and number (+2); paychecks' nullable employee (+1); payroll draft items' amount, now
+    # nullable beside the percentage's nullable rate_millionths and base (+3). No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==4755  # R186 trial fixes: batch query date_from and date_to add two nullable inputs. R186: batch reverse fingerprint adds one nullable input; notice reverse adds nullable note and expected_version
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

@@ -437,6 +437,10 @@ def guard(fn, allowed=False, refusal_facts=None):
         raise redact_error(e, ok())
     except (sqlite3.IntegrityError, sa.exc.IntegrityError) as e:
         message = guard_refusal_text(e)
+        from bookflow.company import payroll_owner
+        if message == payroll_owner.RESERVED_MESSAGE:
+            # The posting-line backstop for writers without the journal line check: refused by name, not as a bug.
+            raise redact_error(payroll_owner.reserved_refusal(), ok()) from None
         if message is None:
             inner = e.orig if isinstance(e, sa.exc.DBAPIError) and isinstance(e.orig, sqlite3.Error) else e
             raise redact_error(io_error("command", inner, getattr(inner, "filename", None)), ok())

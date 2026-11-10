@@ -65,11 +65,37 @@ def row(s, draft):
     return dict(found)
 
 
-def output(values):
+def output(values, s=None, directive=None):
+    """A draft as payroll readers see it; with a session, also its paycheck and latest revision's directive."""
     payload = json.loads(values['payload'])
+    paycheck = None
+    if s is not None:
+        paycheck = posted_from(s, values['id'])
+        if directive is None and has_column(s, 'payroll_draft_revisions', 'directive_id'):
+            directive = s.company.conn.execute(sa.select(c.payroll_draft_revisions.c.directive_id).where(
+                c.payroll_draft_revisions.c.draft_id == values['id']).order_by(
+                c.payroll_draft_revisions.c.version.desc()).limit(1)).scalar()
     return m.DraftOutput(id=values['id'], version=values['version'], state=values['state'],
         settings_version=values['settings_version'], **payload,
-        calculation=json.loads(values['calculation']) if values['calculation'] else None)
+        calculation=json.loads(values['calculation']) if values['calculation'] else None,
+        paycheck=paycheck, directive=directive)
+
+
+def has_column(s, table, column):
+    return any(row[1] == column for row in s.company.conn.exec_driver_sql(f"PRAGMA table_info('{table}')"))
+
+
+def posted_from(s, draft):
+    """The paycheck posted from this draft, if any (increment 2); a posted draft is never edited again."""
+    if not s.company.conn.exec_driver_sql("SELECT 1 FROM sqlite_master WHERE type='table' AND name='payroll_paychecks'").first():
+        return None
+    return s.company.conn.execute(sa.select(c.payroll_paychecks.c.id).where(
+        c.payroll_paychecks.c.draft_id == draft)).scalar()
+
+
+def require_unposted(s, draft):
+    if posted_from(s, draft):
+        fail('draft', 'This draft has a posted paycheck and is kept as posted. Save a new draft instead.')
 
 
 def version(actual, expected):
@@ -81,6 +107,7 @@ def version(actual, expected):
 def calculate(inp):
     trace = []
     gross = 0
+    earned = {}
     with localcontext() as context:
         context.prec = 60
         for line in inp.earnings:
@@ -90,15 +117,28 @@ def calculate(inp):
             if cents > 10**12:
                 fail('earnings', 'Earning exceeds the supported amount range.')
             gross += cents
+            earned[line.code] = cents
             trace.append(m.TraceLine(code=line.code, kind='cash_earning',
                 method='fixed' if line.amount_minor_units is not None else 'quantity_times_rate',
                 quantity=line.quantity, rate=line.rate, exact_minor_units=format(exact, 'f'), amount_minor_units=cents))
-    totals = dict.fromkeys(('employee_tax', 'employee_deduction', 'employer_tax', 'employer_contribution'), 0)
-    for item in inp.items:
-        totals[item.kind] += item.amount_minor_units
-        trace.append(m.TraceLine(code=item.code, kind=item.kind, method='fixed',
-            exact_minor_units=str(item.amount_minor_units), amount_minor_units=item.amount_minor_units,
-            source_note=item.source_note, rounding='fixed_cents'))
+        totals = dict.fromkeys(('employee_tax', 'employee_deduction', 'employer_tax', 'employer_contribution'), 0)
+        for item in inp.items:
+            if item.method == 'fixed':
+                amount = item.amount_minor_units
+                trace.append(m.TraceLine(code=item.code, kind=item.kind, method='fixed',
+                    exact_minor_units=str(amount), amount_minor_units=amount,
+                    source_note=item.source_note, rounding='fixed_cents'))
+            else:
+                if any(code not in earned for code in item.base):
+                    fail('items.base', 'A percentage base names only earning codes on this paycheck.')
+                base = sum(earned[code] for code in item.base)
+                # Exact cents x millionths-of-a-percent / 10^8, rounded once half-up to a cent.
+                exact = Decimal(base) * Decimal(item.rate_millionths) / Decimal(m.RATE_SCALE)
+                amount = int(exact.quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+                trace.append(m.TraceLine(code=item.code, kind=item.kind, method='percent',
+                    exact_minor_units=format(exact, 'f'), amount_minor_units=amount, source_note=item.source_note,
+                    rounding='half_up_once', rate_millionths=item.rate_millionths, base_minor_units=base))
+            totals[item.kind] += amount
     net = gross - totals['employee_tax'] - totals['employee_deduction']
     if net < 0:
         fail('items', 'Employee taxes and deductions exceed cash earnings. Reduce them before calculating; nothing was saved.')
@@ -114,7 +154,7 @@ def retry(s, ctx, inp, command, model):
         raise BookflowError('E_REASON_REQUIRED')
     record = s.company.conn.execute(sa.select(c.payroll_operations).where(
         c.payroll_operations.c.operation_key == inp.operation_key)).mappings().first()
-    digest = input_hash(inp.model_dump(mode='json'), s.company_row['id'])
+    digest = input_hash(m.canonical_items(inp.model_dump(mode='json')), s.company_row['id'])
     if record:
         if record['actor_id'] != s.actor.id or record['command'] != command or record['input_hash'] != digest:
             raise BookflowError('E_IDEMPOTENCY_MISMATCH', message='This payroll operation key is already used.')
@@ -147,7 +187,10 @@ def validate_inputs(s, inp):
     codes = [x.code for x in [*inp.earnings, *inp.items]]
     if len(set(codes)) != len(codes):
         fail('items', 'Use a distinct code for each earning and item.')
+    earnings = {x.code for x in inp.earnings}
     for item in inp.items:
+        if item.base is not None and not set(item.base) <= earnings:
+            fail('items.base', 'A percentage base names only earning codes on this paycheck.')
         item.liability_account = account(s, item.liability_account, ('other_current_liability',), 'items.liability_account')
 
 
@@ -158,6 +201,8 @@ def prepare_draft(inp, ctx, s):
     config = enabled(s)
     old = row(s, inp.draft) if inp.draft else None
     version(old['version'] if old else 0, inp.expected_version)
+    if old:
+        require_unposted(s, old['id'])
     emp = employee(s, inp.employee)
     # Validate a copy: canonical request hashing must not depend on selector resolution.
     clean = inp.model_copy(deep=True)
@@ -168,7 +213,7 @@ def prepare_draft(inp, ctx, s):
     values = dict(id=old['id'] if old else new_id(), employee_id=emp, version=(old['version'] if old else 0) + 1,
         state='draft', currency='USD', pay_date=inp.pay_date, payload=json.dumps(payload), calculation=None,
         settings_version=config.version, created_at=old['created_at'] if old else at, updated_at=at)
-    return Plan(output(values), {'values': values, 'old': old, 'input': inp, 'hash': prior, 'command': 'payroll draft'})
+    return Plan(output(values, directive=ctx.directive_id), {'values': values, 'old': old, 'input': inp, 'hash': prior, 'command': 'payroll draft'})
 
 
 def prepare_calculation(inp, ctx, s):
@@ -178,13 +223,14 @@ def prepare_calculation(inp, ctx, s):
     config = enabled(s)
     old = row(s, inp.draft)
     version(old['version'], inp.expected_version)
+    require_unposted(s, old['id'])
     payload = m.DraftInput(**json.loads(old['payload']), operation_key=inp.operation_key)
     employee(s, payload.employee)
     validate_inputs(s, payload)
     result = calculate(payload)
     values = {**old, 'version': old['version'] + 1, 'state': 'prepared', 'settings_version': config.version,
               'calculation': result.model_dump_json(), 'updated_at': now_iso()}
-    return Plan(output(values), {'values': values, 'old': old, 'input': inp, 'hash': prior, 'command': 'payroll prepare'})
+    return Plan(output(values, directive=ctx.directive_id), {'values': values, 'old': old, 'input': inp, 'hash': prior, 'command': 'payroll prepare'})
 
 
 def apply(plan, ctx, s):
@@ -206,7 +252,8 @@ def apply(plan, ctx, s):
         else:
             s.company.conn.execute(c.payroll_drafts.insert().values(**values))
         s.company.conn.execute(c.payroll_draft_revisions.insert().values(draft_id=values['id'], version=values['version'],
-            snapshot=plan.preview.model_dump_json(), reason=ctx.reason, actor_id=s.actor.id, created_at=now_iso()))
+            snapshot=plan.preview.model_dump_json(), reason=ctx.reason, actor_id=s.actor.id, created_at=now_iso(),
+            directive_id=ctx.directive_id))
         record_type, record_id = 'payroll_draft', values['id']
     s.company.conn.execute(c.payroll_operations.insert().values(operation_key=data['input'].operation_key,
         actor_id=s.actor.id, command=command, input_hash=data['hash'], output=plan.preview.model_dump_json(), reason=ctx.reason))

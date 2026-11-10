@@ -4,7 +4,7 @@
 
 ## `payroll draft`
 
-Save a private paycheck draft: employee, period, optional actual pay date, USD earnings as fixed integer cents or exact quantity and dollar-rate strings, and manually calculated fixed taxes/deductions/employer costs. Items need a liability account, payee and source note (including explicit zero). Confirm taxes_confirmed; an empty item list is an explicit no-tax calculation, never an inferred exemption. To replace a draft, give its ID and expected_version; replacement clears its calculation. A unique operation_key and reason are required. Nothing posts or claims time/commission. Then payroll prepare; reopen through payroll show.
+Save a private paycheck draft: employee, period, optional actual pay date, USD earnings as fixed integer cents or exact quantity and dollar-rate strings, and owner-entered taxes/deductions/employer costs: fixed cents, or method=percent with rate_millionths (millionths of a percent) of named earning codes, rounded half-up once. Items need a liability account, payee and source note (including explicit zero). Confirm taxes_confirmed; an empty item list is an explicit no-tax calculation, never an inferred exemption. To replace a draft, give its ID and expected_version; replacement clears its calculation. A unique operation_key and reason are required. Nothing posts or claims time/commission. Then payroll prepare; reopen through payroll show.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -49,7 +49,10 @@ The same example as complete `bookflow_run` arguments:
 | `earnings[].rate` | inside `--earnings` JSON array | string \| null | no | yes | null | — |
 | `items[].code` | inside `--items` JSON array | string | yes | no | — | minimum length 1; maximum length 60 |
 | `items[].kind` | inside `--items` JSON array | literal["employee_tax", "employee_deduction", "employer_tax", "employer_contribution"] | yes | no | — | — |
-| `items[].amount_minor_units` | inside `--items` JSON array | integer | yes | no | — | minimum 0; maximum 1000000000000 |
+| `items[].method` | inside `--items` JSON array | literal["fixed", "percent"] | no | no | "fixed" | — |
+| `items[].amount_minor_units` | inside `--items` JSON array | integer \| null | no | yes | null | Fixed method only: the owner-calculated amount in cents (explicit zero allowed). |
+| `items[].rate_millionths` | inside `--items` JSON array | integer \| null | no | yes | null | Percent method only: the owner-entered rate in millionths of a percent (10% = 10000000). |
+| `items[].base` | inside `--items` JSON array | array[string] \| null | no | yes | null | Percent method only: the earning codes whose cents form the base; never another item. |
 | `items[].liability_account` | inside `--items` JSON array | string | yes | no | — | — |
 | `items[].payee` | inside `--items` JSON array | string | yes | no | — | minimum length 1; maximum length 200 |
 | `items[].source_note` | inside `--items` JSON array | string | yes | no | — | minimum length 1; maximum length 500 |
@@ -105,7 +108,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items` | array[object] | yes | no | — | — |
 | `items[].code` | string | yes | no | — | — |
 | `items[].kind` | literal["employee_tax", "employee_deduction", "employer_tax", "employer_contribution"] | yes | no | — | — |
-| `items[].amount_minor_units` | integer | yes | no | — | — |
+| `items[].method` | literal["fixed", "percent"] | no | no | "fixed" | — |
+| `items[].amount_minor_units` | integer \| null | no | yes | null | Fixed method only: the owner-calculated amount in cents (explicit zero allowed). |
+| `items[].rate_millionths` | integer \| null | no | yes | null | Percent method only: the owner-entered rate in millionths of a percent (10% = 10000000). |
+| `items[].base` | array[string] \| null | no | yes | null | Percent method only: the earning codes whose cents form the base; never another item. |
 | `items[].liability_account` | string | yes | no | — | — |
 | `items[].payee` | string | yes | no | — | — |
 | `items[].source_note` | string | yes | no | — | — |
@@ -131,7 +137,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `calculation.trace[].amount_minor_units` | integer | yes | no | — | — |
 | `calculation.trace[].rounding` | string | no | no | "half_up_per_line" | — |
 | `calculation.trace[].source_note` | string \| null | no | yes | null | — |
+| `calculation.trace[].rate_millionths` | integer \| null | no | yes | null | — |
+| `calculation.trace[].base_minor_units` | integer \| null | no | yes | null | — |
 | `calculation.ledger_effect` | boolean | no | no | false | — |
+| `paycheck` | string \| null | no | yes | null | The paycheck posted from this draft, once posted. |
+| `directive` | string \| null | no | yes | null | Private: the directive the latest revision was saved under. |
 
 Example JSON output:
 
@@ -139,11 +149,13 @@ Example JSON output:
 {
   "calculation": null,
   "currency": "USD",
+  "directive": null,
   "earnings": [],
   "employee": "value",
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "items": [],
   "pay_date": null,
+  "paycheck": null,
   "period_end": "value",
   "period_start": "value",
   "settings_version": 1,
@@ -261,7 +273,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].items` | array[object] | yes | no | — | — |
 | `rows[].items[].code` | string | yes | no | — | — |
 | `rows[].items[].kind` | literal["employee_tax", "employee_deduction", "employer_tax", "employer_contribution"] | yes | no | — | — |
-| `rows[].items[].amount_minor_units` | integer | yes | no | — | — |
+| `rows[].items[].method` | literal["fixed", "percent"] | no | no | "fixed" | — |
+| `rows[].items[].amount_minor_units` | integer \| null | no | yes | null | Fixed method only: the owner-calculated amount in cents (explicit zero allowed). |
+| `rows[].items[].rate_millionths` | integer \| null | no | yes | null | Percent method only: the owner-entered rate in millionths of a percent (10% = 10000000). |
+| `rows[].items[].base` | array[string] \| null | no | yes | null | Percent method only: the earning codes whose cents form the base; never another item. |
 | `rows[].items[].liability_account` | string | yes | no | — | — |
 | `rows[].items[].payee` | string | yes | no | — | — |
 | `rows[].items[].source_note` | string | yes | no | — | — |
@@ -287,7 +302,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `rows[].calculation.trace[].amount_minor_units` | integer | yes | no | — | — |
 | `rows[].calculation.trace[].rounding` | string | no | no | "half_up_per_line" | — |
 | `rows[].calculation.trace[].source_note` | string \| null | no | yes | null | — |
+| `rows[].calculation.trace[].rate_millionths` | integer \| null | no | yes | null | — |
+| `rows[].calculation.trace[].base_minor_units` | integer \| null | no | yes | null | — |
 | `rows[].calculation.ledger_effect` | boolean | no | no | false | — |
+| `rows[].paycheck` | string \| null | no | yes | null | The paycheck posted from this draft, once posted. |
+| `rows[].directive` | string \| null | no | yes | null | Private: the directive the latest revision was saved under. |
 
 Example JSON output:
 
@@ -323,6 +342,730 @@ Example JSON output:
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
+## `payroll pay-net`
+
+Record the one ordinary check that settles a posted paycheck's whole net pay: Dr net-pay liability, Cr the bank account. Dated on or after the pay date; number, to_be_printed or no_number as for any check. Requires payroll.pay, payroll.read, ledger.post, an enabled layer, the paycheck expected_version, operation_key and reason.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | payroll.pay |
+| Additional resources | payroll.read: member, ledger.post: standard |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/payroll.pay-net` |
+| External binary body | none |
+
+### CLI
+
+`bookflow payroll pay-net --paycheck 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --account Checking --number 1001 --operation-key payroll-pay-1 --company "Demo Plumbing Co" --reason "Record net-pay check" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payroll pay-net", "input": {"paycheck": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "account": "Checking", "number": "1001", "operation_key": "payroll-pay-1"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `account` | `--account` | string | yes | no | — | Bank account the check is drawn on. |
+| `date` | `--date` | string \| null | no | yes | null | Payment date; defaults to the pay date and may not precede it. |
+| `number` | `--number` | string \| null | no | yes | null | Check number; omit for the account's next. |
+| `to_be_printed` | `--to-be-printed` | boolean | no | no | false | Queue the check to print; it takes its number when printed. |
+| `no_number` | `--no-number` | boolean | no | no | false | A bank payment with no paper check (direct deposit recorded by hand). |
+| `paycheck` | `--paycheck` | string | yes | no | — | — |
+| `expected_version` | `--expected-version` | integer | yes | no | — | minimum 1 |
+| `operation_key` | `--operation-key` | string | yes | no | — | minimum length 1; maximum length 128 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/payroll.pay-net`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `id` | string | yes | no | — | — |
+| `version` | integer | yes | no | — | — |
+| `status` | string | yes | no | — | — |
+| `draft` | string | yes | no | — | — |
+| `draft_version` | integer | yes | no | — | — |
+| `employee` | string | yes | no | — | — |
+| `pay_date` | string | yes | no | — | — |
+| `period_start` | string | yes | no | — | — |
+| `period_end` | string | yes | no | — | — |
+| `currency` | string | no | no | "USD" | — |
+| `journal` | string | yes | no | — | The payroll-owned journal entry. |
+| `batch` | string \| null | yes | yes | — | Reverse the paycheck and its net payment as one unit with `batch reverse`. |
+| `gross_minor_units` | integer | yes | no | — | — |
+| `employee_tax_minor_units` | integer | yes | no | — | — |
+| `employee_deduction_minor_units` | integer | yes | no | — | — |
+| `employer_cost_minor_units` | integer | yes | no | — | — |
+| `net_minor_units` | integer | yes | no | — | — |
+| `debit_minor_units` | integer | yes | no | — | — |
+| `credit_minor_units` | integer | yes | no | — | — |
+| `components` | array[object] | yes | no | — | — |
+| `components[].position` | integer | yes | no | — | — |
+| `components[].code` | string | yes | no | — | — |
+| `components[].kind` | string | yes | no | — | — |
+| `components[].method` | string | yes | no | — | — |
+| `components[].amount_minor_units` | integer | yes | no | — | — |
+| `components[].debit_account` | string \| null | no | yes | null | — |
+| `components[].credit_account` | string \| null | no | yes | null | — |
+| `components[].payee` | string \| null | no | yes | null | — |
+| `components[].rate_millionths` | integer \| null | no | yes | null | — |
+| `components[].base_minor_units` | integer \| null | no | yes | null | — |
+| `net_status` | literal["no_payment_needed", "payment_not_recorded", "payment_recorded", "voided"] | yes | no | — | — |
+| `net_payment` | object \| null | no | yes | null | — |
+| `net_payment.id` | string | yes | no | — | — |
+| `net_payment.check` | string | yes | no | — | The check (ledger transaction) that records the payment. |
+| `net_payment.account` | string | yes | no | — | — |
+| `net_payment.date` | string | yes | no | — | — |
+| `net_payment.amount_minor_units` | integer | yes | no | — | — |
+| `net_payment.status` | string | yes | no | — | — |
+| `net_payment.check_number` | string \| null | no | yes | null | — |
+| `net_payment.printed` | boolean | no | no | false | — |
+| `year_to_date` | object | yes | no | — | — |
+| `year_to_date.tax_year` | integer | yes | no | — | — |
+| `year_to_date.gross_minor_units` | integer | yes | no | — | — |
+| `year_to_date.employee_tax_minor_units` | integer | yes | no | — | — |
+| `year_to_date.employee_deduction_minor_units` | integer | yes | no | — | — |
+| `year_to_date.employer_cost_minor_units` | integer | yes | no | — | — |
+| `year_to_date.net_minor_units` | integer | yes | no | — | — |
+| `directive` | string \| null | no | yes | null | Private: the directive the latest write was made under. |
+
+Example JSON output:
+
+```json
+{
+  "batch": null,
+  "components": [],
+  "credit_minor_units": 1,
+  "currency": "USD",
+  "debit_minor_units": 1,
+  "directive": null,
+  "draft": "value",
+  "draft_version": 1,
+  "employee": "value",
+  "employee_deduction_minor_units": 1,
+  "employee_tax_minor_units": 1,
+  "employer_cost_minor_units": 1,
+  "gross_minor_units": 1,
+  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "journal": "value",
+  "net_minor_units": 1,
+  "net_payment": null,
+  "net_status": "no_payment_needed",
+  "pay_date": "2026-01-01",
+  "period_end": "value",
+  "period_start": "value",
+  "status": "value",
+  "version": 1,
+  "year_to_date": {
+    "employee_deduction_minor_units": 1,
+    "employee_tax_minor_units": 1,
+    "employer_cost_minor_units": 1,
+    "gross_minor_units": 1,
+    "net_minor_units": 1,
+    "tax_year": 1
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECONCILIATION_DEPENDENCY` | Another reconciliation record depends on the one this change would move. |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_SYSTEM_RECORD` | That operation would change a protected system record. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
+## `payroll paycheck`
+
+Reopen a posted or voided paycheck: components, accounts, net-pay status and check, and the employee year to date. Requires payroll.read even when payroll is disabled.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | payroll.read |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/payroll.paycheck` |
+| External binary body | none |
+
+### CLI
+
+`bookflow payroll paycheck --paycheck 01ARZ3NDEKTSV4RRFFQ69G5FAV --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payroll paycheck", "input": {"paycheck": "01ARZ3NDEKTSV4RRFFQ69G5FAV"}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `paycheck` | `--paycheck` | string | yes | no | — | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/payroll.paycheck`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `id` | string | yes | no | — | — |
+| `version` | integer | yes | no | — | — |
+| `status` | string | yes | no | — | — |
+| `draft` | string | yes | no | — | — |
+| `draft_version` | integer | yes | no | — | — |
+| `employee` | string | yes | no | — | — |
+| `pay_date` | string | yes | no | — | — |
+| `period_start` | string | yes | no | — | — |
+| `period_end` | string | yes | no | — | — |
+| `currency` | string | no | no | "USD" | — |
+| `journal` | string | yes | no | — | The payroll-owned journal entry. |
+| `batch` | string \| null | yes | yes | — | Reverse the paycheck and its net payment as one unit with `batch reverse`. |
+| `gross_minor_units` | integer | yes | no | — | — |
+| `employee_tax_minor_units` | integer | yes | no | — | — |
+| `employee_deduction_minor_units` | integer | yes | no | — | — |
+| `employer_cost_minor_units` | integer | yes | no | — | — |
+| `net_minor_units` | integer | yes | no | — | — |
+| `debit_minor_units` | integer | yes | no | — | — |
+| `credit_minor_units` | integer | yes | no | — | — |
+| `components` | array[object] | yes | no | — | — |
+| `components[].position` | integer | yes | no | — | — |
+| `components[].code` | string | yes | no | — | — |
+| `components[].kind` | string | yes | no | — | — |
+| `components[].method` | string | yes | no | — | — |
+| `components[].amount_minor_units` | integer | yes | no | — | — |
+| `components[].debit_account` | string \| null | no | yes | null | — |
+| `components[].credit_account` | string \| null | no | yes | null | — |
+| `components[].payee` | string \| null | no | yes | null | — |
+| `components[].rate_millionths` | integer \| null | no | yes | null | — |
+| `components[].base_minor_units` | integer \| null | no | yes | null | — |
+| `net_status` | literal["no_payment_needed", "payment_not_recorded", "payment_recorded", "voided"] | yes | no | — | — |
+| `net_payment` | object \| null | no | yes | null | — |
+| `net_payment.id` | string | yes | no | — | — |
+| `net_payment.check` | string | yes | no | — | The check (ledger transaction) that records the payment. |
+| `net_payment.account` | string | yes | no | — | — |
+| `net_payment.date` | string | yes | no | — | — |
+| `net_payment.amount_minor_units` | integer | yes | no | — | — |
+| `net_payment.status` | string | yes | no | — | — |
+| `net_payment.check_number` | string \| null | no | yes | null | — |
+| `net_payment.printed` | boolean | no | no | false | — |
+| `year_to_date` | object | yes | no | — | — |
+| `year_to_date.tax_year` | integer | yes | no | — | — |
+| `year_to_date.gross_minor_units` | integer | yes | no | — | — |
+| `year_to_date.employee_tax_minor_units` | integer | yes | no | — | — |
+| `year_to_date.employee_deduction_minor_units` | integer | yes | no | — | — |
+| `year_to_date.employer_cost_minor_units` | integer | yes | no | — | — |
+| `year_to_date.net_minor_units` | integer | yes | no | — | — |
+| `directive` | string \| null | no | yes | null | Private: the directive the latest write was made under. |
+
+Example JSON output:
+
+```json
+{
+  "batch": null,
+  "components": [],
+  "credit_minor_units": 1,
+  "currency": "USD",
+  "debit_minor_units": 1,
+  "directive": null,
+  "draft": "value",
+  "draft_version": 1,
+  "employee": "value",
+  "employee_deduction_minor_units": 1,
+  "employee_tax_minor_units": 1,
+  "employer_cost_minor_units": 1,
+  "gross_minor_units": 1,
+  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "journal": "value",
+  "net_minor_units": 1,
+  "net_payment": null,
+  "net_status": "no_payment_needed",
+  "pay_date": "2026-01-01",
+  "period_end": "value",
+  "period_start": "value",
+  "status": "value",
+  "version": 1,
+  "year_to_date": {
+    "employee_deduction_minor_units": 1,
+    "employee_tax_minor_units": 1,
+    "employer_cost_minor_units": 1,
+    "gross_minor_units": 1,
+    "net_minor_units": 1,
+    "tax_year": 1
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
+## `payroll paychecks`
+
+List posted and voided paychecks, newest pay date first, optionally for one employee. Requires payroll.read.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | read |
+| Required role | member |
+| Capability | payroll.read |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/payroll.paychecks` |
+| External binary body | none |
+
+### CLI
+
+`bookflow payroll paychecks --limit 25 --company "Demo Plumbing Co" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payroll paychecks", "input": {"limit": 25}, "company": "Company ID or name"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `limit` | `--limit` | integer | no | no | 50 | minimum 1; maximum 200 |
+| `employee` | `--employee` | string \| null | no | yes | null | — |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/payroll.paychecks`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `rows` | array[object] | yes | no | — | — |
+| `rows[].id` | string | yes | no | — | — |
+| `rows[].version` | integer | yes | no | — | — |
+| `rows[].status` | string | yes | no | — | — |
+| `rows[].draft` | string | yes | no | — | — |
+| `rows[].draft_version` | integer | yes | no | — | — |
+| `rows[].employee` | string | yes | no | — | — |
+| `rows[].pay_date` | string | yes | no | — | — |
+| `rows[].period_start` | string | yes | no | — | — |
+| `rows[].period_end` | string | yes | no | — | — |
+| `rows[].currency` | string | no | no | "USD" | — |
+| `rows[].journal` | string | yes | no | — | The payroll-owned journal entry. |
+| `rows[].batch` | string \| null | yes | yes | — | Reverse the paycheck and its net payment as one unit with `batch reverse`. |
+| `rows[].gross_minor_units` | integer | yes | no | — | — |
+| `rows[].employee_tax_minor_units` | integer | yes | no | — | — |
+| `rows[].employee_deduction_minor_units` | integer | yes | no | — | — |
+| `rows[].employer_cost_minor_units` | integer | yes | no | — | — |
+| `rows[].net_minor_units` | integer | yes | no | — | — |
+| `rows[].debit_minor_units` | integer | yes | no | — | — |
+| `rows[].credit_minor_units` | integer | yes | no | — | — |
+| `rows[].components` | array[object] | yes | no | — | — |
+| `rows[].components[].position` | integer | yes | no | — | — |
+| `rows[].components[].code` | string | yes | no | — | — |
+| `rows[].components[].kind` | string | yes | no | — | — |
+| `rows[].components[].method` | string | yes | no | — | — |
+| `rows[].components[].amount_minor_units` | integer | yes | no | — | — |
+| `rows[].components[].debit_account` | string \| null | no | yes | null | — |
+| `rows[].components[].credit_account` | string \| null | no | yes | null | — |
+| `rows[].components[].payee` | string \| null | no | yes | null | — |
+| `rows[].components[].rate_millionths` | integer \| null | no | yes | null | — |
+| `rows[].components[].base_minor_units` | integer \| null | no | yes | null | — |
+| `rows[].net_status` | literal["no_payment_needed", "payment_not_recorded", "payment_recorded", "voided"] | yes | no | — | — |
+| `rows[].net_payment` | object \| null | no | yes | null | — |
+| `rows[].net_payment.id` | string | yes | no | — | — |
+| `rows[].net_payment.check` | string | yes | no | — | The check (ledger transaction) that records the payment. |
+| `rows[].net_payment.account` | string | yes | no | — | — |
+| `rows[].net_payment.date` | string | yes | no | — | — |
+| `rows[].net_payment.amount_minor_units` | integer | yes | no | — | — |
+| `rows[].net_payment.status` | string | yes | no | — | — |
+| `rows[].net_payment.check_number` | string \| null | no | yes | null | — |
+| `rows[].net_payment.printed` | boolean | no | no | false | — |
+| `rows[].year_to_date` | object | yes | no | — | — |
+| `rows[].year_to_date.tax_year` | integer | yes | no | — | — |
+| `rows[].year_to_date.gross_minor_units` | integer | yes | no | — | — |
+| `rows[].year_to_date.employee_tax_minor_units` | integer | yes | no | — | — |
+| `rows[].year_to_date.employee_deduction_minor_units` | integer | yes | no | — | — |
+| `rows[].year_to_date.employer_cost_minor_units` | integer | yes | no | — | — |
+| `rows[].year_to_date.net_minor_units` | integer | yes | no | — | — |
+| `rows[].directive` | string \| null | no | yes | null | Private: the directive the latest write was made under. |
+
+Example JSON output:
+
+```json
+{
+  "rows": []
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
+## `payroll post`
+
+Post one prepared paycheck draft to the ledger as one payroll-owned journal entry dated on its actual pay date: Dr wage expense per earning and employer expense per employer item; Cr each item liability account and the net-pay liability. Amounts are the saved calculation, never recalculated. Requires payroll.post, payroll.read, ledger.post, an enabled layer, unchanged settings, an open period, expected_version and a unique operation_key and reason. A draft posts once. Optional net_check also records the one check settling the whole net pay in the same transaction (needs payroll.pay); zero net needs no payment. Reverse as one unit with batch reverse.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | payroll.post |
+| Additional resources | payroll.read: member, ledger.post: standard |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/payroll.post` |
+| External binary body | none |
+
+### CLI
+
+`bookflow payroll post --draft 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 2 --operation-key payroll-post-1 --check-account Checking --check-number 1001 --company "Demo Plumbing Co" --reason "Post reviewed paycheck" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payroll post", "input": {"draft": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 2, "operation_key": "payroll-post-1", "check_account": "Checking", "check_number": "1001"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `draft` | `--draft` | string | yes | no | — | — |
+| `expected_version` | `--expected-version` | integer | yes | no | — | The prepared draft version being posted.; minimum 1 |
+| `operation_key` | `--operation-key` | string | yes | no | — | minimum length 1; maximum length 128 |
+| `check_account` | `--check-account` | string \| null | no | yes | null | Post and record check: the bank account of the one check that settles the whole net pay in the same transaction. Omit to post only and record the check later with payroll pay-net. |
+| `check_date` | `--check-date` | string \| null | no | yes | null | Check date; defaults to the pay date and may not precede it. |
+| `check_number` | `--check-number` | string \| null | no | yes | null | Check number; omit for the account's next. |
+| `check_to_be_printed` | `--check-to-be-printed` | boolean | no | no | false | Queue the check to print; it takes its number when printed. |
+| `check_no_number` | `--check-no-number` | boolean | no | no | false | A bank payment with no paper check. |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/payroll.post`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `id` | string | yes | no | — | — |
+| `version` | integer | yes | no | — | — |
+| `status` | string | yes | no | — | — |
+| `draft` | string | yes | no | — | — |
+| `draft_version` | integer | yes | no | — | — |
+| `employee` | string | yes | no | — | — |
+| `pay_date` | string | yes | no | — | — |
+| `period_start` | string | yes | no | — | — |
+| `period_end` | string | yes | no | — | — |
+| `currency` | string | no | no | "USD" | — |
+| `journal` | string | yes | no | — | The payroll-owned journal entry. |
+| `batch` | string \| null | yes | yes | — | Reverse the paycheck and its net payment as one unit with `batch reverse`. |
+| `gross_minor_units` | integer | yes | no | — | — |
+| `employee_tax_minor_units` | integer | yes | no | — | — |
+| `employee_deduction_minor_units` | integer | yes | no | — | — |
+| `employer_cost_minor_units` | integer | yes | no | — | — |
+| `net_minor_units` | integer | yes | no | — | — |
+| `debit_minor_units` | integer | yes | no | — | — |
+| `credit_minor_units` | integer | yes | no | — | — |
+| `components` | array[object] | yes | no | — | — |
+| `components[].position` | integer | yes | no | — | — |
+| `components[].code` | string | yes | no | — | — |
+| `components[].kind` | string | yes | no | — | — |
+| `components[].method` | string | yes | no | — | — |
+| `components[].amount_minor_units` | integer | yes | no | — | — |
+| `components[].debit_account` | string \| null | no | yes | null | — |
+| `components[].credit_account` | string \| null | no | yes | null | — |
+| `components[].payee` | string \| null | no | yes | null | — |
+| `components[].rate_millionths` | integer \| null | no | yes | null | — |
+| `components[].base_minor_units` | integer \| null | no | yes | null | — |
+| `net_status` | literal["no_payment_needed", "payment_not_recorded", "payment_recorded", "voided"] | yes | no | — | — |
+| `net_payment` | object \| null | no | yes | null | — |
+| `net_payment.id` | string | yes | no | — | — |
+| `net_payment.check` | string | yes | no | — | The check (ledger transaction) that records the payment. |
+| `net_payment.account` | string | yes | no | — | — |
+| `net_payment.date` | string | yes | no | — | — |
+| `net_payment.amount_minor_units` | integer | yes | no | — | — |
+| `net_payment.status` | string | yes | no | — | — |
+| `net_payment.check_number` | string \| null | no | yes | null | — |
+| `net_payment.printed` | boolean | no | no | false | — |
+| `year_to_date` | object | yes | no | — | — |
+| `year_to_date.tax_year` | integer | yes | no | — | — |
+| `year_to_date.gross_minor_units` | integer | yes | no | — | — |
+| `year_to_date.employee_tax_minor_units` | integer | yes | no | — | — |
+| `year_to_date.employee_deduction_minor_units` | integer | yes | no | — | — |
+| `year_to_date.employer_cost_minor_units` | integer | yes | no | — | — |
+| `year_to_date.net_minor_units` | integer | yes | no | — | — |
+| `directive` | string \| null | no | yes | null | Private: the directive the latest write was made under. |
+
+Example JSON output:
+
+```json
+{
+  "batch": null,
+  "components": [],
+  "credit_minor_units": 1,
+  "currency": "USD",
+  "debit_minor_units": 1,
+  "directive": null,
+  "draft": "value",
+  "draft_version": 1,
+  "employee": "value",
+  "employee_deduction_minor_units": 1,
+  "employee_tax_minor_units": 1,
+  "employer_cost_minor_units": 1,
+  "gross_minor_units": 1,
+  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "journal": "value",
+  "net_minor_units": 1,
+  "net_payment": null,
+  "net_status": "no_payment_needed",
+  "pay_date": "2026-01-01",
+  "period_end": "value",
+  "period_start": "value",
+  "status": "value",
+  "version": 1,
+  "year_to_date": {
+    "employee_deduction_minor_units": 1,
+    "employee_tax_minor_units": 1,
+    "employer_cost_minor_units": 1,
+    "gross_minor_units": 1,
+    "net_minor_units": 1,
+    "tax_year": 1
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECONCILIATION_DEPENDENCY` | Another reconciliation record depends on the one this change would move. |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_SYSTEM_RECORD` | That operation would change a protected system record. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |
@@ -415,7 +1158,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items` | array[object] | yes | no | — | — |
 | `items[].code` | string | yes | no | — | — |
 | `items[].kind` | literal["employee_tax", "employee_deduction", "employer_tax", "employer_contribution"] | yes | no | — | — |
-| `items[].amount_minor_units` | integer | yes | no | — | — |
+| `items[].method` | literal["fixed", "percent"] | no | no | "fixed" | — |
+| `items[].amount_minor_units` | integer \| null | no | yes | null | Fixed method only: the owner-calculated amount in cents (explicit zero allowed). |
+| `items[].rate_millionths` | integer \| null | no | yes | null | Percent method only: the owner-entered rate in millionths of a percent (10% = 10000000). |
+| `items[].base` | array[string] \| null | no | yes | null | Percent method only: the earning codes whose cents form the base; never another item. |
 | `items[].liability_account` | string | yes | no | — | — |
 | `items[].payee` | string | yes | no | — | — |
 | `items[].source_note` | string | yes | no | — | — |
@@ -441,7 +1187,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `calculation.trace[].amount_minor_units` | integer | yes | no | — | — |
 | `calculation.trace[].rounding` | string | no | no | "half_up_per_line" | — |
 | `calculation.trace[].source_note` | string \| null | no | yes | null | — |
+| `calculation.trace[].rate_millionths` | integer \| null | no | yes | null | — |
+| `calculation.trace[].base_minor_units` | integer \| null | no | yes | null | — |
 | `calculation.ledger_effect` | boolean | no | no | false | — |
+| `paycheck` | string \| null | no | yes | null | The paycheck posted from this draft, once posted. |
+| `directive` | string \| null | no | yes | null | Private: the directive the latest revision was saved under. |
 
 Example JSON output:
 
@@ -449,11 +1199,13 @@ Example JSON output:
 {
   "calculation": null,
   "currency": "USD",
+  "directive": null,
   "earnings": [],
   "employee": "value",
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "items": [],
   "pay_date": null,
+  "paycheck": null,
   "period_end": "value",
   "period_start": "value",
   "settings_version": 1,
@@ -806,7 +1558,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items` | array[object] | yes | no | — | — |
 | `items[].code` | string | yes | no | — | — |
 | `items[].kind` | literal["employee_tax", "employee_deduction", "employer_tax", "employer_contribution"] | yes | no | — | — |
-| `items[].amount_minor_units` | integer | yes | no | — | — |
+| `items[].method` | literal["fixed", "percent"] | no | no | "fixed" | — |
+| `items[].amount_minor_units` | integer \| null | no | yes | null | Fixed method only: the owner-calculated amount in cents (explicit zero allowed). |
+| `items[].rate_millionths` | integer \| null | no | yes | null | Percent method only: the owner-entered rate in millionths of a percent (10% = 10000000). |
+| `items[].base` | array[string] \| null | no | yes | null | Percent method only: the earning codes whose cents form the base; never another item. |
 | `items[].liability_account` | string | yes | no | — | — |
 | `items[].payee` | string | yes | no | — | — |
 | `items[].source_note` | string | yes | no | — | — |
@@ -832,7 +1587,11 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `calculation.trace[].amount_minor_units` | integer | yes | no | — | — |
 | `calculation.trace[].rounding` | string | no | no | "half_up_per_line" | — |
 | `calculation.trace[].source_note` | string \| null | no | yes | null | — |
+| `calculation.trace[].rate_millionths` | integer \| null | no | yes | null | — |
+| `calculation.trace[].base_minor_units` | integer \| null | no | yes | null | — |
 | `calculation.ledger_effect` | boolean | no | no | false | — |
+| `paycheck` | string \| null | no | yes | null | The paycheck posted from this draft, once posted. |
+| `directive` | string \| null | no | yes | null | Private: the directive the latest revision was saved under. |
 
 Example JSON output:
 
@@ -840,11 +1599,13 @@ Example JSON output:
 {
   "calculation": null,
   "currency": "USD",
+  "directive": null,
   "earnings": [],
   "employee": "value",
   "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "items": [],
   "pay_date": null,
+  "paycheck": null,
   "period_end": "value",
   "period_start": "value",
   "settings_version": 1,
@@ -880,6 +1641,396 @@ Example JSON output:
 | `E_RECORD_NOT_FOUND` | No such record. |
 | `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
 | `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
+## `payroll void`
+
+Void a posted paycheck: its journal entry is voided and an exact negative year-to-date event is appended. Refuses while its net payment is recorded (void that first), when a later paycheck for the employee and year is posted, or when the period is closed. Works with the layer off. Give expected_version, operation_key, reason.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | payroll.void |
+| Additional resources | payroll.read: member, ledger.post: standard |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/payroll.void` |
+| External binary body | none |
+
+### CLI
+
+`bookflow payroll void --paycheck 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 1 --operation-key payroll-void-1 --company "Demo Plumbing Co" --reason "Posted to the wrong employee" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payroll void", "input": {"paycheck": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 1, "operation_key": "payroll-void-1"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `paycheck` | `--paycheck` | string | yes | no | — | — |
+| `expected_version` | `--expected-version` | integer | yes | no | — | minimum 1 |
+| `operation_key` | `--operation-key` | string | yes | no | — | minimum length 1; maximum length 128 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/payroll.void`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `id` | string | yes | no | — | — |
+| `version` | integer | yes | no | — | — |
+| `status` | string | yes | no | — | — |
+| `draft` | string | yes | no | — | — |
+| `draft_version` | integer | yes | no | — | — |
+| `employee` | string | yes | no | — | — |
+| `pay_date` | string | yes | no | — | — |
+| `period_start` | string | yes | no | — | — |
+| `period_end` | string | yes | no | — | — |
+| `currency` | string | no | no | "USD" | — |
+| `journal` | string | yes | no | — | The payroll-owned journal entry. |
+| `batch` | string \| null | yes | yes | — | Reverse the paycheck and its net payment as one unit with `batch reverse`. |
+| `gross_minor_units` | integer | yes | no | — | — |
+| `employee_tax_minor_units` | integer | yes | no | — | — |
+| `employee_deduction_minor_units` | integer | yes | no | — | — |
+| `employer_cost_minor_units` | integer | yes | no | — | — |
+| `net_minor_units` | integer | yes | no | — | — |
+| `debit_minor_units` | integer | yes | no | — | — |
+| `credit_minor_units` | integer | yes | no | — | — |
+| `components` | array[object] | yes | no | — | — |
+| `components[].position` | integer | yes | no | — | — |
+| `components[].code` | string | yes | no | — | — |
+| `components[].kind` | string | yes | no | — | — |
+| `components[].method` | string | yes | no | — | — |
+| `components[].amount_minor_units` | integer | yes | no | — | — |
+| `components[].debit_account` | string \| null | no | yes | null | — |
+| `components[].credit_account` | string \| null | no | yes | null | — |
+| `components[].payee` | string \| null | no | yes | null | — |
+| `components[].rate_millionths` | integer \| null | no | yes | null | — |
+| `components[].base_minor_units` | integer \| null | no | yes | null | — |
+| `net_status` | literal["no_payment_needed", "payment_not_recorded", "payment_recorded", "voided"] | yes | no | — | — |
+| `net_payment` | object \| null | no | yes | null | — |
+| `net_payment.id` | string | yes | no | — | — |
+| `net_payment.check` | string | yes | no | — | The check (ledger transaction) that records the payment. |
+| `net_payment.account` | string | yes | no | — | — |
+| `net_payment.date` | string | yes | no | — | — |
+| `net_payment.amount_minor_units` | integer | yes | no | — | — |
+| `net_payment.status` | string | yes | no | — | — |
+| `net_payment.check_number` | string \| null | no | yes | null | — |
+| `net_payment.printed` | boolean | no | no | false | — |
+| `year_to_date` | object | yes | no | — | — |
+| `year_to_date.tax_year` | integer | yes | no | — | — |
+| `year_to_date.gross_minor_units` | integer | yes | no | — | — |
+| `year_to_date.employee_tax_minor_units` | integer | yes | no | — | — |
+| `year_to_date.employee_deduction_minor_units` | integer | yes | no | — | — |
+| `year_to_date.employer_cost_minor_units` | integer | yes | no | — | — |
+| `year_to_date.net_minor_units` | integer | yes | no | — | — |
+| `directive` | string \| null | no | yes | null | Private: the directive the latest write was made under. |
+
+Example JSON output:
+
+```json
+{
+  "batch": null,
+  "components": [],
+  "credit_minor_units": 1,
+  "currency": "USD",
+  "debit_minor_units": 1,
+  "directive": null,
+  "draft": "value",
+  "draft_version": 1,
+  "employee": "value",
+  "employee_deduction_minor_units": 1,
+  "employee_tax_minor_units": 1,
+  "employer_cost_minor_units": 1,
+  "gross_minor_units": 1,
+  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "journal": "value",
+  "net_minor_units": 1,
+  "net_payment": null,
+  "net_status": "no_payment_needed",
+  "pay_date": "2026-01-01",
+  "period_end": "value",
+  "period_start": "value",
+  "status": "value",
+  "version": 1,
+  "year_to_date": {
+    "employee_deduction_minor_units": 1,
+    "employee_tax_minor_units": 1,
+    "employer_cost_minor_units": 1,
+    "gross_minor_units": 1,
+    "net_minor_units": 1,
+    "tax_year": 1
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECONCILIATION_DEPENDENCY` | Another reconciliation record depends on the one this change would move. |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_SYSTEM_RECORD` | That operation would change a protected system record. |
+| `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
+| `E_USAGE` | Invalid command syntax. |
+| `E_VALIDATION` | Invalid input. |
+| `E_VERSION_CONFLICT` | The record changed since the version you read. |
+
+## `payroll void-payment`
+
+Void a paycheck's net-pay check through the check machinery, leaving the paycheck posted with net pay unpaid. A printed check may be voided (the paper record stays); refuses while it is in an unanswered print run, cleared in a reconciliation or matched to a bank line. Give the paycheck expected_version, operation_key and reason.
+
+A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
+
+| Contract | Value |
+|---|---|
+| Scope | company |
+| Kind | write |
+| Required role | standard |
+| Capability | payroll.void |
+| Additional resources | payroll.read: member, ledger.post: standard |
+| Feature | — |
+| HTTP | `POST /companies/{company_id}/commands/payroll.void-payment` |
+| External binary body | none |
+
+### CLI
+
+`bookflow payroll void-payment --paycheck 01ARZ3NDEKTSV4RRFFQ69G5FAV --expected-version 2 --operation-key payroll-void-pay-1 --company "Demo Plumbing Co" --reason "Check spoiled" --json`
+
+### MCP
+
+The same example as complete `bookflow_run` arguments:
+
+```json
+{"command": "payroll void-payment", "input": {"paycheck": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "expected_version": 2, "operation_key": "payroll-void-pay-1"}, "company": "Company ID or name", "dry_run": true, "reason": "Preview the requested change"}
+```
+
+### Input
+
+| JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
+|---|---|---|---|---|---|---|
+| `paycheck` | `--paycheck` | string | yes | no | — | — |
+| `expected_version` | `--expected-version` | integer | yes | no | — | minimum 1 |
+| `operation_key` | `--operation-key` | string | yes | no | — | minimum length 1; maximum length 128 |
+
+### Command and context options
+
+| Option | Meaning |
+|---|---|
+| `--json` | Print one JSON object. |
+| `--data-root TEXT` | Data root; otherwise `BOOKFLOW_DATA_ROOT`, then `~/.bookflow`. |
+| `--dry-run` | Validate and preview without writing. |
+| `--reason TEXT` | Short reason for the write. |
+| `--source-ref TEXT` | Identifier of the source that triggered the write. |
+| `--interactive` | Prompt for input fields not supplied as arguments or options. |
+| `--directive TEXT` | Standing-instruction code or id cited by the write. |
+| `--company TEXT` | Company id, `Organization/Company`, or display name. |
+
+### HTTP
+
+Route: `POST /companies/{company_id}/commands/payroll.void-payment`
+
+Send the input object as JSON. Authentication may instead come from a browser session cookie.
+
+| Header | Requirement | Meaning |
+|---|---|---|
+| `Authorization` | required for bearer clients | `Bearer <secret>` |
+| `X-Bookflow-Client-Name` | optional | Stable caller name recorded in audit |
+| `X-Bookflow-Client-Version` | optional | Caller version recorded in audit |
+| `X-Bookflow-Context-Encoding` | optional | percent-utf8: encode all reason, source-ref, directive, idempotency-key, client-name and client-version header values as UTF-8 percent encoding |
+| `X-Bookflow-Company` | optional | If sent, must equal the company ULID in the route |
+| `X-Bookflow-Reason` | conditional | Short reason; an agent or system write needs this or an active directive |
+| `X-Bookflow-Source-Ref` | optional | Identifier of the source that triggered the write |
+| `X-Bookflow-Directive` | conditional | Active directive code or id; alternative to reason for an agent or system write |
+
+### Output
+
+| JSON field | Type | Required | Nullable | Default | Description |
+|---|---|---|---|---|---|
+| `id` | string | yes | no | — | — |
+| `version` | integer | yes | no | — | — |
+| `status` | string | yes | no | — | — |
+| `draft` | string | yes | no | — | — |
+| `draft_version` | integer | yes | no | — | — |
+| `employee` | string | yes | no | — | — |
+| `pay_date` | string | yes | no | — | — |
+| `period_start` | string | yes | no | — | — |
+| `period_end` | string | yes | no | — | — |
+| `currency` | string | no | no | "USD" | — |
+| `journal` | string | yes | no | — | The payroll-owned journal entry. |
+| `batch` | string \| null | yes | yes | — | Reverse the paycheck and its net payment as one unit with `batch reverse`. |
+| `gross_minor_units` | integer | yes | no | — | — |
+| `employee_tax_minor_units` | integer | yes | no | — | — |
+| `employee_deduction_minor_units` | integer | yes | no | — | — |
+| `employer_cost_minor_units` | integer | yes | no | — | — |
+| `net_minor_units` | integer | yes | no | — | — |
+| `debit_minor_units` | integer | yes | no | — | — |
+| `credit_minor_units` | integer | yes | no | — | — |
+| `components` | array[object] | yes | no | — | — |
+| `components[].position` | integer | yes | no | — | — |
+| `components[].code` | string | yes | no | — | — |
+| `components[].kind` | string | yes | no | — | — |
+| `components[].method` | string | yes | no | — | — |
+| `components[].amount_minor_units` | integer | yes | no | — | — |
+| `components[].debit_account` | string \| null | no | yes | null | — |
+| `components[].credit_account` | string \| null | no | yes | null | — |
+| `components[].payee` | string \| null | no | yes | null | — |
+| `components[].rate_millionths` | integer \| null | no | yes | null | — |
+| `components[].base_minor_units` | integer \| null | no | yes | null | — |
+| `net_status` | literal["no_payment_needed", "payment_not_recorded", "payment_recorded", "voided"] | yes | no | — | — |
+| `net_payment` | object \| null | no | yes | null | — |
+| `net_payment.id` | string | yes | no | — | — |
+| `net_payment.check` | string | yes | no | — | The check (ledger transaction) that records the payment. |
+| `net_payment.account` | string | yes | no | — | — |
+| `net_payment.date` | string | yes | no | — | — |
+| `net_payment.amount_minor_units` | integer | yes | no | — | — |
+| `net_payment.status` | string | yes | no | — | — |
+| `net_payment.check_number` | string \| null | no | yes | null | — |
+| `net_payment.printed` | boolean | no | no | false | — |
+| `year_to_date` | object | yes | no | — | — |
+| `year_to_date.tax_year` | integer | yes | no | — | — |
+| `year_to_date.gross_minor_units` | integer | yes | no | — | — |
+| `year_to_date.employee_tax_minor_units` | integer | yes | no | — | — |
+| `year_to_date.employee_deduction_minor_units` | integer | yes | no | — | — |
+| `year_to_date.employer_cost_minor_units` | integer | yes | no | — | — |
+| `year_to_date.net_minor_units` | integer | yes | no | — | — |
+| `directive` | string \| null | no | yes | null | Private: the directive the latest write was made under. |
+
+Example JSON output:
+
+```json
+{
+  "batch": null,
+  "components": [],
+  "credit_minor_units": 1,
+  "currency": "USD",
+  "debit_minor_units": 1,
+  "directive": null,
+  "draft": "value",
+  "draft_version": 1,
+  "employee": "value",
+  "employee_deduction_minor_units": 1,
+  "employee_tax_minor_units": 1,
+  "employer_cost_minor_units": 1,
+  "gross_minor_units": 1,
+  "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "journal": "value",
+  "net_minor_units": 1,
+  "net_payment": null,
+  "net_status": "no_payment_needed",
+  "pay_date": "2026-01-01",
+  "period_end": "value",
+  "period_start": "value",
+  "status": "value",
+  "version": 1,
+  "year_to_date": {
+    "employee_deduction_minor_units": 1,
+    "employee_tax_minor_units": 1,
+    "employer_cost_minor_units": 1,
+    "gross_minor_units": 1,
+    "net_minor_units": 1,
+    "tax_year": 1
+  }
+}
+```
+
+### Errors
+
+| Code | Meaning |
+|---|---|
+| `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
+| `E_COMPANY_NOT_FOUND` | No such company. |
+| `E_CONFIG_INVALID` | The configuration file could not be read. |
+| `E_CONTEXT_IN_INPUT` | Input contains a context field. |
+| `E_DB_BUSY` | Another Bookflow command is running on this data root. |
+| `E_DIRECTIVE_INACTIVE` | That directive has been deactivated. |
+| `E_DIRECTIVE_NOT_FOUND` | No such directive. |
+| `E_FEATURE_DISABLED` | This feature is not enabled for the company. |
+| `E_FS_UNKNOWN` | The filesystem type of the path could not be determined. |
+| `E_GUARD_REFUSED` | Bookflow's own safety check in the database refused this write, so nothing was saved. This is a Bookflow bug, not a problem with your input or your disk: please report it with this error's details and request id. |
+| `E_IDEMPOTENCY_MISMATCH` | That idempotency key was used for a different command or input. |
+| `E_INTERNAL` | Internal failure. |
+| `E_IO` | A filesystem operation failed. |
+| `E_MIGRATION_FAILED` | A schema migration failed; the database was backed up first and is unchanged. |
+| `E_NETWORK_SHARE` | The path is on a network filesystem, which Bookflow refuses to use. |
+| `E_NOT_INITIALIZED` | The data root is not initialized; run `bookflow init`. |
+| `E_NO_ACTOR` | This login is not mapped to a Bookflow user. |
+| `E_ORGANIZATION_NOT_FOUND` | No such organization. |
+| `E_PARTIAL_WRITE` | The authoritative write committed, but a secondary update remains incomplete. |
+| `E_PERIOD_CLOSED` | An affected accounting date is in a closed period. |
+| `E_PERMISSION` | The acting user may not run this command here. |
+| `E_PREVIEW_STALE` | The resolved document facts changed since preview; preview again before saving. |
+| `E_REASON_REQUIRED` | This write needs a reason: a short phrase naming what triggered it (--reason on the CLI, a top-level reason on MCP, the X-Bookflow-Reason header on HTTP). |
+| `E_RECONCILIATION_DEPENDENCY` | Another reconciliation record depends on the one this change would move. |
+| `E_RECORD_NOT_FOUND` | No such record. |
+| `E_SCHEMA_BEHIND` | The database schema is behind this version of Bookflow; run `bookflow upgrade`. |
+| `E_SCHEMA_UNKNOWN` | The database schema revision is not known to this version of Bookflow; upgrade Bookflow. |
+| `E_SYSTEM_RECORD` | That operation would change a protected system record. |
 | `E_UNAUTHENTICATED` | No valid credential: log in, or send a bearer token. |
 | `E_USAGE` | Invalid command syntax. |
 | `E_VALIDATION` | Invalid input. |

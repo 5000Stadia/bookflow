@@ -440,6 +440,9 @@ def history(s, ctx, inp, noun):
 def _translate(s, ctx, inp, noun, operation):
     """The journal this call posts, the footer it will show, and what it asks of the chequebook."""
     header = money_out.resolve(s, getattr(inp, SELECTOR[noun]), noun) if operation != 'post' else None
+    if header is not None:
+        from bookflow.company.payroll_owner import require_unowned
+        require_unowned(s, header['id'])
     if operation == 'void':
         revision = journals.revision(s, header)
         lines = money_out.lines(s, revision)
@@ -488,7 +491,8 @@ def prepare(s, ctx, inp, noun, operation):
                 {'input': inp, 'noun': noun, 'operation': operation, 'prospective': fresh})
 
 
-def apply(plan, ctx, s):
+def apply(plan, ctx, s, *, owner_rows=None):
+    """``owner_rows(transaction_id)`` gives rows an owning module (payroll) writes before the legs."""
     # Rebuilt inside the writer transaction, the same way the register does it: references,
     # dates, versions and numbering -- the cheque's as well as the journal's -- are only
     # decisive here. A retry under the same idempotency key never reaches this: dispatch
@@ -519,8 +523,9 @@ def apply(plan, ctx, s):
     if item_rows:
         extra += (('money_out_item_lines', 'money_out_item_line', 'document_line_id', item_rows),)
     planned = fresh.data.get('check_instrument') if fresh.data['changed'] else None
+    first = owner_rows((fresh.data.get('header') or header)['id']) if owner_rows and fresh.data['changed'] else ()
     applied = journals.persist_prepared(
-        fresh, ctx, s, command_name=f'{noun} {operation}', extra=extra,
+        fresh, ctx, s, command_name=f'{noun} {operation}', extra=extra, first=first,
         **_audit_name(s, noun, summary, planned, fresh.data.get('header') or header))
     if stock is not None:
         applied = inventory_effects.settle(applied, stock, ctx, s,
