@@ -130,7 +130,8 @@ accountant_copy_export = command(
                  'dated on or before the dividing date. The copy is for one designated external accountant (`accountant`; '
                  'default the one designated, and one must be): every change it sends back is posted as them. The dividing '
                  'date must be after the closing date. No backup ever carries the key that verifies the copy\'s change file. '
-                 'An agent may prepare this hand-off.'),
+                 'An agent may prepare this hand-off. A company containing private payroll records also requires payroll.read; '
+                 'the complete archive retains those private records.'),
     input_model=m.CopyExportInput, output_model=m.CopyExportOutput, writes={'company'}, required_role='admin',
     capability='company', positional=['through'], error_codes=['E_VALIDATION', 'E_PERMISSION', 'E_IO', 'E_BACKUP_INVALID'])
 

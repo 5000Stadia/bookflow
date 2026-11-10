@@ -524,7 +524,19 @@ FIELDS: dict[str, dict[str, tuple]] = {
         'sale_line': (_P, (), 'Whole sales line profile; explicitly excluded by the owning plan.'),
         'tax': (_P, (), 'Sales tax component snapshot; explicitly excluded by the owning plan.'),
     },
+    'commission_models.CommissionSnapshot': {
+        'enabled_at_entry': (_P, (), 'Private sales attribution; not deposit cash provenance.'),
+        'recipients': (_P, (), 'Private sales attribution; not deposit cash provenance.'),
+        'net_minor_units': (_P, (), 'Attributed sales net; not a deposit cash amount.'),
+        'currency': (_P, (), 'Private sales attribution currency.'),
+    },
+    'commission_models.CapturedRecipient': {
+        'recipient_id': (_P, (), 'Private sales attribution identity; no deposit reference admission.'),
+        'recipient_label': (_P, (), 'Private sales attribution display name.'),
+        'share': (_P, (), 'Private sales attribution share.'),
+    },
     'sales_facts.SalesLineProfile': {
+        'commission': (_P, (), 'Private sales attribution; excluded with the whole sales line profile.'),
         'schema_version': (_P, (), 'Sales line profile; explicitly excluded by the owning plan.'),
         'item': (_P, (), 'Sales line profile; explicitly excluded by the owning plan.'),
         'item_type': (_P, (), 'Sales line profile; explicitly excluded by the owning plan.'),

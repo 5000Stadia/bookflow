@@ -67,13 +67,24 @@ def project(s, row, contact_rows=None):
     return data
 
 
-def _check_version(s, row, expected, changes):
+def _check_version(s, row, expected):
     from bookflow.core.audit import decode_snapshot
-    from bookflow.core.versioning import check_update, current_writer, history_from_entries
-    check_update(current_version=row['version'], current_updated_at=row['updated_at'],
-        current_writer=current_writer(s.company, 'lead', row['id'], row), changes=set(changes), expected_version=expected,
-        history_since=lambda v: history_from_entries(s.company, 'lead', row['id'], v, decode_snapshot),
-        actor_id=s.actor.id, window_seconds=0)
+    from bookflow.core.versioning import current_writer, history_from_entries, fold_field, _conflict_message, _seconds_since
+    if expected == row['version']:
+        return
+    writer = current_writer(s.company, 'lead', row['id'], row)
+    history = history_from_entries(s.company, 'lead', row['id'], expected, decode_snapshot)
+    changed = sorted({fold_field(key) for entry in history for key in (entry.changed_columns or [])})
+    details = {
+        'record_type': 'lead', 'record_id': row['id'], 'expected_version': expected,
+        'current_version': row['version'], 'changed_fields': changed,
+        'updated_by': writer.updated_by if writer else None,
+        'updated_by_name': writer.updated_by_name if writer else None,
+        'updated_on_behalf_of': writer.on_behalf_of if writer else None,
+        'updated_on_behalf_of_name': writer.on_behalf_of_name if writer else None,
+        'updated_via': writer.updated_via if writer else None,
+        'seconds_since_update': _seconds_since(row['updated_at'])}
+    raise BookflowError('E_VERSION_CONFLICT', message=_conflict_message(details, changed), details=details)
 
 
 def prepare(s, ctx, inp, verb):
@@ -83,7 +94,7 @@ def prepare(s, ctx, inp, verb):
     existing = () if before is None else contacts(s, before['id'])
     writes, desired, owner = (), existing, None
     if before:
-        _check_version(s, before, inp.expected_version, inp.model_fields_set)
+        _check_version(s, before, inp.expected_version)
         if before['status'] == 'converted':
             raise parties._validation('lead', 'converted lead identity is locked until conversion is reversed')
         row = dict(before)

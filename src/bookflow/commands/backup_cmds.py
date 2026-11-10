@@ -51,13 +51,16 @@ company_backup = command(
     description=("Write a verified, portable backup of the selected company: one .bookflow-backup archive holding its database "
                  "(a consistent copy), its attachment files and a manifest of fingerprints, saved read-only in the company folder's "
                  "backups/ with an audit checkpoint beside it (`backup verify`). The archive is reopened and checked before success "
-                 "is reported. Copy it anywhere; `company restore` opens it."),
+                 "is reported. Copy it anywhere; `company restore` opens it. A company containing private payroll records "
+                 "also requires payroll.read to create this complete archive."),
     input_model=Empty, output_model=CompanyBackupOutput, writes={"company"}, required_role="admin", capability="company",
     error_codes=["E_IO", "E_BACKUP_INVALID"])
 
 
 @company_backup
 def plan_company_backup(inp: Empty, ctx: Context, s: Session) -> Plan:
+    from bookflow.company.payroll_privacy import require_archive_read
+    require_archive_read(s)
     from bookflow.company import schema as c
     from bookflow.core.ids import new_id
     from bookflow.storage.migrate import current_revision_open
@@ -75,6 +78,8 @@ def plan_company_backup(inp: Empty, ctx: Context, s: Session) -> Plan:
 
 @company_backup.applier
 def apply_company_backup(plan: Plan, ctx: Context, s: Session) -> Applied:
+    from bookflow.company.payroll_privacy import require_archive_read
+    require_archive_read(s)
     from bookflow.core.context import client_version
     row = s.company_row
     result = archive.create(s.company.path.parent, company_id=row["id"], display_name=row["display_name"],

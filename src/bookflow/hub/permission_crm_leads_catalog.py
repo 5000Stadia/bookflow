@@ -1,8 +1,8 @@
-"""CRM lead read/write rights on notice-reversal-v1; agent grants remain explicit."""
+"""CRM lead read/write rights on commission-attribution-v1; agent grants remain explicit."""
 from dataclasses import asdict, replace
 import hashlib
 import json
-from . import permission_notice_reversal_catalog as previous, permission_catalog as c
+from . import permission_commission_attribution_catalog as previous, permission_catalog as c
 from .permission_snapshot import CatalogBundle
 
 SOURCE_COMMIT = 'bf41ae7ff3422aced7ab29023fcc07fac63f87b0'

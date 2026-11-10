@@ -110,7 +110,10 @@ def test_registry_execution_ledger_has_no_unclassified_commands(tmp_path):
     # +4 ringing up (R114 increment 5): pos sale preview, complete, pos customer search, add.
     # +9 shared POS layout, styles and group pictures (R114 increment 6).
     # +5 hold/list/resume/discard and completed-sale void (R114 increment 7).
-    assert len(rows) == 923  # 916 + seven lead commands (R115 increment 1)
+    # + seven lead commands (R115 increment 1).
+    # R189: +2 commission recipient-options and report commission-attribution commands.
+    # + six private payroll calculator commands (R116 increment 1).
+    assert len(rows) == 937  # + batch reverse, notice reverse (R186); +6 purchase-draft create, update, preview, cancel, show, list (R122)
     # +10 physical counts (R104 increment 2): inventory-count create/enter/sheet/show/query/post/cancel/void,
     # report physical-inventory-worksheet and inventory-valuation-detail.
     # +11 todo create, update, complete, show, list; notice generate, list, show, mark-sent, dismiss; reminders (R111).
@@ -189,7 +192,7 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # 26 -> 27 (R150): unit prices and costs take SalesPriceInput, the shape of SalesMoneyInput with an
     # amount exact to three places past the minor unit. Measured per command on both trees: the same
     # 3430 paths, now split across one more variant kind.
-    assert len(mapped)==len(variant_policies())==28
+    assert len(mapped)==len(variant_policies())==29
     # The census of material schema nodes. It moves whenever a routed command gains input
     # shape. Measured from the merged tree on every merge -- no branch's number survives
     # another branch landing.
@@ -463,7 +466,11 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # Increment 11 adds four: complete's nullable tender and tenders plus the list tender amount/reference.
     # R115 increment 1: 4497 + lead create 36, update 37, list 3, close 1;
     # todo list cursor and reminders todos_cursor add one each. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==4576
+    # R189: +22 invoice line commission input and attribution lookup/report filter paths.
+    # 4527 -> 4535 (R116 increment 1): setup account null branches (3), draft ID/pay date
+    # and earning amount/quantity/rate null branches (5). Other payroll commands add zero.
+    # R122 adds 28: create/update 13 each, list 2; cancel/preview/show 0. No new variant kind.
+    assert sum(len(group["paths"]) for group in mapped)==4636  # R186 trial fixes: batch query date_from and date_to add two nullable inputs. R186: batch reverse fingerprint adds one nullable input; notice reverse adds nullable note and expected_version
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

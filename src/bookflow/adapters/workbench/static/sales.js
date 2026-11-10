@@ -270,3 +270,130 @@
   });
   window.bookflowLiveTotals = {schedule, refresh};
 })();
+
+/* Invoice attribution captures a name choice; pricing and authority stay in commands. */
+(() => {
+  if (window.bookflowCommissionPicker) return;
+  window.bookflowCommissionPicker = true;
+  const wire = row => row.querySelector('[data-commission-value]');
+  const item = row => row.querySelector('[data-ref-value][name$=":item"]');
+  const changed = row => wire(row)?.dispatchEvent(new Event('change', {bubbles: true}));
+  async function pick(row, newlySelected) {
+    const form = row.closest('[data-commission-entry]');
+    if (!form || !item(row)?.value || !wire(row)) return;
+    const old = wire(row).value;
+    const url = new URL(form.dataset.commissionOptions, location.origin);
+    url.searchParams.set('item', item(row).value);
+    const rep = form.querySelector('[name="f:sales_rep"]')?.value;
+    if (rep) url.searchParams.set('sales_rep', rep);
+    const customer = form.querySelector('[name="f:customer"]')?.value;
+    if (customer) url.searchParams.set('customer', customer);
+    const dialog = document.createElement('dialog');
+    dialog.className = 'commission-picker';
+    dialog.setAttribute('aria-labelledby', 'commission-picker-title');
+    dialog.innerHTML = '<header><h2 id="commission-picker-title">Who gets this line’s commission?</h2><label>Search recipients<input type="search" data-commission-search></label></header><p role="status" data-commission-status>Loading recipients…</p><div data-commission-choices></div><footer><button type="button" data-commission-cancel>Cancel</button><button type="button" data-commission-select disabled>Select</button></footer>';
+    document.body.append(dialog);
+    let selection = null, sequence = 0;
+    const status = dialog.querySelector('[data-commission-status]');
+    const select = dialog.querySelector('[data-commission-select]');
+    const finish = cancel => {
+      if (cancel && newlySelected) {
+        if (!old && !row.dataset.commissionItem && !row.querySelector('[name$=":line_id"]')?.value) row.remove();
+        else {
+          // An item edit is uncommitted until the recipient has been selected.
+          const prior = row.dataset.commissionItem;
+          const picker = item(row).closest('[data-reference]');
+          item(row).value = prior || '';
+          picker.querySelector('[data-ref-search]').value = row.dataset.commissionItemLabel || '';
+        }
+      }
+      dialog.close(); dialog.remove();
+      if (row.isConnected) (row.querySelector('[data-commission-edit]') || item(row))?.focus();
+      else form.querySelector('[data-collection-path="lines"] [data-collection-add]')?.focus();
+      window.bookflowSales?.invalidate(form);
+    };
+    dialog.addEventListener('cancel', event => { event.preventDefault(); finish(true); });
+    dialog.querySelector('[data-commission-cancel]').onclick = () => finish(true);
+    select.onclick = () => {
+      if (!selection) return;
+      wire(row).value = JSON.stringify({recipients: [{recipient: selection.id, share: 100}]});
+      row.querySelector('[data-commission-edit]').textContent = 'Commission: ' + selection.name;
+      row.dataset.commissionItem = item(row).value;
+      row.dataset.commissionItemLabel = item(row).closest('[data-reference]').querySelector('[data-ref-search]').value;
+      changed(row); finish(false);
+    };
+    async function lookup(initial = false) {
+      const current = ++sequence;
+      url.searchParams.set('search', dialog.querySelector('[data-commission-search]').value);
+      try {
+        const response = await fetch(url, {credentials: 'same-origin'});
+        const data = await response.json();
+        if (current !== sequence || !dialog.isConnected) return;
+        if (!response.ok) throw new Error(data.message || data.error?.message || 'Recipient lookup refused.');
+        if (initial && !data.commission_enabled) {
+          wire(row).value = '';
+          row.querySelector('[data-commission-edit]').textContent = 'No commission';
+          row.dataset.commissionItem = item(row).value;
+          row.dataset.commissionItemLabel = item(row).closest('[data-reference]').querySelector('[data-ref-search]').value;
+          dialog.remove(); changed(row); return;
+        }
+        if (!dialog.open) dialog.showModal();
+        const choices = dialog.querySelector('[data-commission-choices]');
+        choices.replaceChildren(); selection = null; select.disabled = true;
+        for (const option of data.items) {
+          const label = document.createElement('label');
+          const radio = document.createElement('input');
+          radio.type = 'radio'; radio.name = 'commission-choice'; radio.value = option.id;
+          radio.onchange = () => { selection = option; select.disabled = false; };
+          label.append(radio, document.createTextNode(option.name +
+            (option.id === data.suggested_recipient_id ? ' (suggested by header rep)' : '')));
+          choices.append(label);
+        }
+        status.textContent = data.items.length ? 'Choose one recipient.' : 'No active recipients. Add names in Sales reps.';
+        if (initial) dialog.querySelector('[data-commission-search]').focus();
+      } catch (error) {
+        if (!dialog.isConnected) return;
+        if (!dialog.open) dialog.showModal();
+        status.textContent = error.message;
+      }
+    }
+    dialog.querySelector('[data-commission-search]').oninput = () => lookup();
+    await lookup(true);
+  }
+  document.addEventListener('bookflow:reference-selected', event => {
+    if (event.target.querySelector('[data-ref-value][name$=":item"]'))
+      pick(event.target.closest('[data-collection-item]'), true);
+  });
+  document.addEventListener('click', event => {
+    const button = event.target.closest('[data-commission-edit]');
+    if (button) pick(button.closest('[data-collection-item]'), false);
+  });
+  function remember() {
+    document.querySelectorAll('[data-commission-entry] .line-row').forEach(row => {
+      if (item(row)?.value && !row.dataset.commissionItem) {
+        row.dataset.commissionItem = item(row).value;
+        row.dataset.commissionItemLabel = item(row).closest('[data-reference]').querySelector('[data-ref-search]').value;
+      }
+    });
+  }
+  document.addEventListener('DOMContentLoaded', remember);
+  document.addEventListener('htmx:afterSwap', remember);
+  remember();
+})();
+
+// Attribution sorting only reorders the report's captured rows; it never recomputes totals.
+document.addEventListener('click', event => {
+  const button = event.target.closest('[data-commission-sort]');
+  if (!button) return;
+  const table = button.closest('table'), column = Number(button.dataset.commissionSort);
+  const header = button.closest('th');
+  const direction = header.getAttribute('aria-sort') === 'ascending' ? -1 : 1;
+  table.querySelectorAll('th').forEach(th => th.setAttribute('aria-sort', 'none'));
+  header.setAttribute('aria-sort', direction === 1 ? 'ascending' : 'descending');
+  const rows = [...table.tBodies[0].rows];
+  const key = row => row.cells[column].dataset.sortValue || row.cells[column].textContent.trim();
+  rows.sort((left, right) => direction * (column === 4
+    ? (BigInt(key(left)) < BigInt(key(right)) ? -1 : BigInt(key(left)) > BigInt(key(right)) ? 1 : 0)
+    : key(left).localeCompare(key(right))));
+  table.tBodies[0].append(...rows);
+});

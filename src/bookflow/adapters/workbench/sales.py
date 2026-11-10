@@ -67,6 +67,10 @@ def editable_values(record):
         if line.get('pricing_basis') == 'amount':
             row.pop('price_level', None)
             row.pop('price_basis_amount', None)
+        if facts.get('commission'):
+            row['commission'] = {'recipients': [
+                {'recipient': allocation['recipient_id'], 'share': allocation['share']}
+                for allocation in facts['commission']['recipients']]}
         result['lines'].append(row)
     return result
 

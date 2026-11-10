@@ -109,3 +109,8 @@ Database: `company`.
 | `pos_layout_version` | INTEGER | no | — | — | — | — | POS layout revision, independent of company settings. Zero means the category seed has not yet been saved; positive revisions also preserve an intentionally empty layout. |
 | `crm_pipeline_enabled` | BOOLEAN | no | — | — | — | — | Reserved optional CRM layer; off until its increment is installed. |
 | `crm_campaigns_enabled` | BOOLEAN | no | — | — | — | — | Reserved optional CRM layer; off until its increment is installed. |
+| `commission_attribution_enabled` | BOOLEAN | no | — | — | — | — | Enable commission attribution on invoice lines; no calculation or payout setup. |
+| `purchase_approvals_enabled` | BOOLEAN | no | — | — | — | — | Reserved approval layer switch; off until the approval workflow is available. |
+| `bill_approvals_enabled` | BOOLEAN | no | — | — | — | — | Reserved approval layer switch; off until the approval workflow is available. |
+| `approval_routing_enabled` | BOOLEAN | no | — | — | — | — | Reserved approval layer switch; off until the approval workflow is available. |
+| `approval_reminders_enabled` | BOOLEAN | no | — | — | — | — | Reserved approval layer switch; off until the approval workflow is available. |

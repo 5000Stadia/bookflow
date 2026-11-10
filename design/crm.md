@@ -421,7 +421,7 @@ are future build acceptance, not instructions to add tests in this design-only c
    Exact-name selectors refuse ambiguity; IDs select a specific lead. Updates require versions, and closes require
    the command reason. Duplicate links reject cycles. Archive and closure leave native follow-ups open.
 
-   Migration `co0129` starts the three lead tables empty, preserves existing customer/contact rows, adds disabled
+   Migration `co0132` starts the three lead tables empty, preserves existing customer/contact rows, adds disabled
    `crm_pipeline_enabled` and `crm_campaigns_enabled` fields, and extends the native to-do link constraint and index.
    These settings are reserved and cannot be enabled in this increment. No pipeline or campaign tables exist.
 
@@ -436,8 +436,8 @@ are future build acceptance, not instructions to add tests in this design-only c
    a file. Generated command/schema references include the new contracts. No money is posted and nothing is sent.
 
    Conversion/import reversal, manual communications, pipeline, financial snapshots and campaign grouping remain
-   in increments 2–6. The CRM integration fixtures use the current schema because the unrelated historical fresh
-   company migration chain refuses its settlement guard at `co0043`; the CRM upgrade itself is tested from `co0128`.
+   in increments 2–6. CRM integration fixtures create companies through the ordinary migration chain;
+   the CRM upgrade itself is tested from `co0131`.
 
 2. **Conversion and reversible lead imports (M).** Native customer validation, new/existing conversion, contact maps,
    unified lead/customer history, source-key imports and R186 inverse adapter. **Done when:** a person continues an

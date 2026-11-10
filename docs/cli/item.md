@@ -90,6 +90,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `category` | string \| null | yes | yes | — | — |
 | `description` | string \| null | yes | yes | — | — |
 | `purchase_description` | string \| null | yes | yes | — | — |
+| `commission_enabled` | boolean | no | no | false | — |
 | `sales_enabled` | boolean | yes | no | — | — |
 | `purchase_enabled` | boolean | yes | no | — | — |
 | `price` | object \| null | yes | yes | — | — |
@@ -262,6 +263,7 @@ Example JSON output:
   "child_count": 1,
   "cogs_account_id": null,
   "combined_percent": null,
+  "commission_enabled": false,
   "cost": null,
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
@@ -577,6 +579,7 @@ The same example as complete `bookflow_run` arguments:
 | `category_id` | `--category-id` | string \| null | no | yes | null | — |
 | `description` | `--description` | string \| null | no | yes | null | — |
 | `purchase_description` | `--purchase-description` | string \| null | no | yes | null | — |
+| `commission_enabled` | `--commission-enabled` | boolean | no | no | null | Require one commission recipient on new invoice lines when commission attribution is enabled; no rates or payments. |
 | `sales_enabled` | `--sales-enabled` | boolean \| null | no | yes | null | — |
 | `purchase_enabled` | `--purchase-enabled` | boolean \| null | no | yes | null | — |
 | `price` | `--price` | any \| null | no | yes | null | — |
@@ -697,6 +700,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `category` | string \| null | yes | yes | — | — |
 | `description` | string \| null | yes | yes | — | — |
 | `purchase_description` | string \| null | yes | yes | — | — |
+| `commission_enabled` | boolean | no | no | false | — |
 | `sales_enabled` | boolean | yes | no | — | — |
 | `purchase_enabled` | boolean | yes | no | — | — |
 | `price` | object \| null | yes | yes | — | — |
@@ -865,6 +869,7 @@ Example JSON output:
   "child_count": 1,
   "cogs_account_id": null,
   "combined_percent": null,
+  "commission_enabled": false,
   "cost": null,
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
@@ -1072,6 +1077,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `category` | string \| null | yes | yes | — | — |
 | `description` | string \| null | yes | yes | — | — |
 | `purchase_description` | string \| null | yes | yes | — | — |
+| `commission_enabled` | boolean | no | no | false | — |
 | `sales_enabled` | boolean | yes | no | — | — |
 | `purchase_enabled` | boolean | yes | no | — | — |
 | `price` | object \| null | yes | yes | — | — |
@@ -1244,6 +1250,7 @@ Example JSON output:
   "child_count": 1,
   "cogs_account_id": null,
   "combined_percent": null,
+  "commission_enabled": false,
   "cost": null,
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
@@ -1442,6 +1449,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].category` | string \| null | yes | yes | — | — |
 | `items[].description` | string \| null | yes | yes | — | — |
 | `items[].purchase_description` | string \| null | yes | yes | — | — |
+| `items[].commission_enabled` | boolean | no | no | false | — |
 | `items[].sales_enabled` | boolean | yes | no | — | — |
 | `items[].purchase_enabled` | boolean | yes | no | — | — |
 | `items[].price` | object \| null | yes | yes | — | — |
@@ -2020,6 +2028,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `category` | string \| null | yes | yes | — | — |
 | `description` | string \| null | yes | yes | — | — |
 | `purchase_description` | string \| null | yes | yes | — | — |
+| `commission_enabled` | boolean | no | no | false | — |
 | `sales_enabled` | boolean | yes | no | — | — |
 | `purchase_enabled` | boolean | yes | no | — | — |
 | `price` | object \| null | yes | yes | — | — |
@@ -2186,6 +2195,7 @@ Example JSON output:
   "child_count": 1,
   "cogs_account_id": null,
   "combined_percent": null,
+  "commission_enabled": false,
   "cost": null,
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",
@@ -2458,6 +2468,7 @@ The same example as complete `bookflow_run` arguments:
 | `category_id` | `--category-id` | string \| null | no | yes | null | — |
 | `description` | `--description` | string \| null | no | yes | null | — |
 | `purchase_description` | `--purchase-description` | string \| null | no | yes | null | — |
+| `commission_enabled` | `--commission-enabled` | boolean | no | no | null | Require a commission recipient on new invoice lines; needs commission.manage and attribution enabled to turn on. Omission preserves; null refuses. |
 | `sales_enabled` | `--sales-enabled` | boolean \| null | no | yes | null | — |
 | `purchase_enabled` | `--purchase-enabled` | boolean \| null | no | yes | null | — |
 | `price` | `--price` | any \| null | no | yes | null | — |
@@ -2581,6 +2592,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `category` | string \| null | yes | yes | — | — |
 | `description` | string \| null | yes | yes | — | — |
 | `purchase_description` | string \| null | yes | yes | — | — |
+| `commission_enabled` | boolean | no | no | false | — |
 | `sales_enabled` | boolean | yes | no | — | — |
 | `purchase_enabled` | boolean | yes | no | — | — |
 | `price` | object \| null | yes | yes | — | — |
@@ -2754,6 +2766,7 @@ Example JSON output:
   "child_count": 1,
   "cogs_account_id": null,
   "combined_percent": null,
+  "commission_enabled": false,
   "cost": null,
   "created_at": "2026-01-01T00:00:00Z",
   "created_by": "value",

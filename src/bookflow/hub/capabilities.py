@@ -21,11 +21,17 @@ from bookflow.core.errors import BookflowError
 from . import people_only
 from . import permission_automation_catalog as _automation_v1
 from .permission_capabilities_catalog import CAPABILITIES as _V1, CLOSING_DATE_CAPABILITY, COMMAND_CAPABILITY as _COMMAND_V1
+from .permission_payroll_draft_catalog import CAPABILITIES as PAYROLL
 from .permission_bank_source_catalog import CAPABILITIES as _BANK_SOURCE
 COMMAND_CAPABILITY = {**_COMMAND_V1, **{name: cap for cap, (_, names) in _BANK_SOURCE.items() for name in names}}
 
 # capabilities-v1's and automation-v1's (automate.bank-rule, automate.invoice: no command of their own).
-CAPABILITIES = {**_V1, **_automation_v1.CAPABILITIES, **_BANK_SOURCE}
+_APPROVAL = {
+    'approval.prepare': ('standard', tuple('purchase-draft ' + verb for verb in ('create', 'update', 'cancel'))),
+    'approval.read': ('standard', tuple('purchase-draft ' + verb for verb in ('show', 'list', 'preview'))),
+}
+COMMAND_CAPABILITY.update({name: cap for cap, (_, names) in _APPROVAL.items() for name in names})
+CAPABILITIES = {**_V1, **_automation_v1.CAPABILITIES, **_BANK_SOURCE, **_APPROVAL}
 
 HUB = frozenset(name for name, (threshold, _) in CAPABILITIES.items() if threshold == 'hub_admin')
 # The POS layer (pos-v1, design/point-of-sale.md §9): an agent holds a pos.* capability only by an explicit grant, as
@@ -33,6 +39,8 @@ HUB = frozenset(name for name, (threshold, _) in CAPABILITIES.items() if thresho
 # refused by a deny, through the policy like any capability; only the agent's half is asked here.
 from .permission_pos_catalog import CAPABILITIES as _POS  # noqa: E402
 POS = frozenset(_POS)
+from .permission_commission_attribution_catalog import CAPABILITIES as _COMMISSION
+COMMISSION = frozenset(_COMMISSION)
 
 
 def pos_capability(cmd) -> str | None:
@@ -46,14 +54,27 @@ def pos_capability(cmd) -> str | None:
 
 
 def capability_for(command: str) -> str | None:
+    if command.startswith('payroll '):
+        from bookflow.core import registry
+        cmd = registry.get(command)
+        if cmd is not None and cmd.capability in PAYROLL:
+            return cmd.capability
     found = COMMAND_CAPABILITY.get(command)
     if found is None:
         from bookflow.core import registry
-        found = pos_capability(registry.get(command))
+        cmd = registry.get(command)
+        found = pos_capability(cmd)
+        if found is None and cmd is not None:
+            found = cmd.capability if cmd.capability in COMMISSION else next(
+                (cap for cap, _ in cmd.resource_requirements if cap in COMMISSION), None)
     return found
 
 
 def threshold(capability: str) -> str:
+    if capability in _COMMISSION:
+        return _COMMISSION[capability][0]
+    if capability in PAYROLL:
+        return PAYROLL[capability]
     return _POS[capability][0] if capability in _POS else CAPABILITIES[capability][0]
 
 

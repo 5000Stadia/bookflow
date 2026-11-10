@@ -103,6 +103,8 @@ The same example as complete `bookflow_run` arguments:
 | `request.input.refresh_defaults` | `--request-input-refresh-defaults` | boolean | no | no | false | Present in InvoiceUpdatePreviewRequest. |
 | `request.input.use_defaults` | `--request-input-use-defaults` | array[literal["sales_tax_calculation", "billing_address", "shipping_address", "terms", "due_date", "ship_method", "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `request.input.custom_field_kinds` | `--request-input-custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in InvoiceUpdatePreviewRequest. |
+| `request.input.lines[].commission.recipients[].recipient` | inside `--request-input-lines` JSON array | string | no | no | — | Present in InvoiceUpdatePreviewRequest.; minimum length 1; maximum length 1004 |
+| `request.input.lines[].commission.recipients[].share` | inside `--request-input-lines` JSON array | literal[100] | no | no | 100 | Present in InvoiceUpdatePreviewRequest. |
 | `request.input.lines[].line_id` | inside `--request-input-lines` JSON array | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `request.input.lines[].item` | inside `--request-input-lines` JSON array | string | no | no | — | Present in InvoiceUpdatePreviewRequest.; minimum length 1; maximum length 1004 |
 | `request.input.lines[].quantity` | inside `--request-input-lines` JSON array | string | no | no | "1" | Present in InvoiceUpdatePreviewRequest. |

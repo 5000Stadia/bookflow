@@ -1347,3 +1347,15 @@ globals().update(_define_crm_tables(_sys.modules[__name__]))
 for _setting in ('crm_pipeline_enabled', 'crm_campaigns_enabled'):
     company_info.append_column(_column(_setting, sa.Boolean,
         'Reserved optional CRM layer; off until its increment is installed.', nullable=False, server_default='0'))
+# R189 increment 1: independent off-by-default attribution flags.
+company_info.append_column(_column("commission_attribution_enabled", sa.Boolean,
+    "Enable commission attribution on invoice lines; no calculation or payout setup.", nullable=False, server_default="0"))
+items.append_column(_column("commission_enabled", sa.Boolean,
+    "Require one recipient on new invoice lines while attribution is enabled.", nullable=False, server_default="0"))
+from bookflow.company import payroll_schema as _payroll_schema
+globals().update(_payroll_schema.define_tables(metadata, _column, _table))
+
+from bookflow.company import purchase_draft_schema as _purchase_draft_schema
+globals().update(_purchase_draft_schema.define_tables(metadata, _column, _table, _common))
+for _purchase_draft_column in _purchase_draft_schema.company_columns(_column):
+    company_info.append_column(_purchase_draft_column)

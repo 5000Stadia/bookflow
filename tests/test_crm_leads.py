@@ -95,6 +95,9 @@ def test_duplicate_names_need_ids_and_versioned_lifecycle_preserves_tasks(books)
     with pytest.raises(BookflowError) as stale:
         write(books, 'lead reopen', {'lead': first['id'], 'expected_version': 1})
     assert stale.value.code == 'E_VERSION_CONFLICT'
+    assert 'status' in stale.value.details['changed_fields']
+    assert stale.value.details['updated_by'] == closed['updated_by']
+    assert stale.value.details['seconds_since_update'] is not None
     reopened = write(books, 'lead reopen', {'lead': first['id'], 'expected_version': closed['version']})
     archived = write(books, 'lead archive', {'lead': first['id'], 'expected_version': reopened['version']})
     assert archived['archived'] and archived['status'] == 'open'
@@ -202,9 +205,9 @@ def test_old_customer_contacts_survive_crm_migration(books):
         for ddl in frozen.INDEXES:
             if ' ON todos ' in ddl:
                 db.execute(ddl)
-        db.execute("UPDATE alembic_version SET version_num='co0128'")
+        db.execute("UPDATE alembic_version SET version_num='co0131'")
     with open_database(path, writable=True) as db:
-        assert migrate_to_head(db, 'company', None) == ('co0128', 'co0129')
+        assert migrate_to_head(db, 'company', None) == ('co0131', 'co0132')
         assert db.raw.execute('SELECT * FROM customers').fetchall() == before
         assert db.raw.execute('SELECT * FROM customer_contacts').fetchall() == contacts
         assert db.raw.execute('PRAGMA foreign_key_check').fetchall() == []

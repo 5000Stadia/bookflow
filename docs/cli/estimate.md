@@ -745,6 +745,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.markup_percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.billable` | boolean | no | no | true | — |
 | `revision.lines[].facts.profile` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.commission` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.commission.enabled_at_entry` | literal[true] | no | no | true | — |
+| `revision.lines[].facts.profile.commission.recipients` | array[object] | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.recipients[].recipient_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.recipients[].recipient_label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.recipients[].share` | literal[100] | no | no | 100 | — |
+| `revision.lines[].facts.profile.commission.net_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.currency` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.schema_version` | literal[1, 2, 3] | no | no | 1 | — |
 | `revision.lines[].facts.profile.item` | object | yes | no | — | — |
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
@@ -1264,6 +1272,8 @@ The same example as complete `bookflow_run` arguments:
 | `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
 | `customer` | `--customer` | string | yes | no | — | minimum length 1; maximum length 1004 |
 | `title` | `--title` | string | yes | no | — | minimum length 1; maximum length 200 |
+| `lines[].commission.recipients[].recipient` | inside `--lines` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
+| `lines[].commission.recipients[].share` | inside `--lines` JSON array | literal[100] | no | no | 100 | — |
 | `lines[].line_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].item` | inside `--lines` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
 | `lines[].quantity` | inside `--lines` JSON array | string | no | no | "1" | — |
@@ -1650,6 +1660,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.markup_percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.billable` | boolean | no | no | true | — |
 | `revision.lines[].facts.profile` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.commission` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.commission.enabled_at_entry` | literal[true] | no | no | true | — |
+| `revision.lines[].facts.profile.commission.recipients` | array[object] | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.recipients[].recipient_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.recipients[].recipient_label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.recipients[].share` | literal[100] | no | no | 100 | — |
+| `revision.lines[].facts.profile.commission.net_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.currency` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.schema_version` | literal[1, 2, 3] | no | no | 1 | — |
 | `revision.lines[].facts.profile.item` | object | yes | no | — | — |
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
@@ -2810,6 +2828,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].gross_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].currency` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.commission.enabled_at_entry` | literal[true] | no | no | true | — |
+| `revision.lines[].item_snapshot.commission.recipients` | array[object] | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.recipients[].recipient_id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.recipients[].recipient_label` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.recipients[].share` | literal[100] | no | no | 100 | — |
+| `revision.lines[].item_snapshot.commission.net_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.currency` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.schema_version` | literal[1, 2, 3] | no | no | 1 | — |
 | `revision.lines[].item_snapshot.item` | object | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.id` | string | yes | no | — | — |
@@ -3244,6 +3270,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.use_defaults` | array[literal["sales_tax_calculation", "billing_address", "shipping_address", "terms", "due_date", "ship_method", "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines` | array[object] \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].commission` | object \| null | no | yes | null | Invoice attribution: exactly one sales-rep recipient with share 100; required for enabled new items when attribution is on. Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].commission.recipients` | array[object] | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].commission.recipients[].recipient` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].commission.recipients[].share` | literal[100] | no | no | 100 | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].line_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].item` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].quantity` | string | no | no | "1" | Present in InvoiceUpdatePreviewRequest. |
@@ -4221,6 +4251,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.markup_percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.billable` | boolean | no | no | true | — |
 | `revision.lines[].facts.profile` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.commission` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.commission.enabled_at_entry` | literal[true] | no | no | true | — |
+| `revision.lines[].facts.profile.commission.recipients` | array[object] | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.recipients[].recipient_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.recipients[].recipient_label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.recipients[].share` | literal[100] | no | no | 100 | — |
+| `revision.lines[].facts.profile.commission.net_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.currency` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.schema_version` | literal[1, 2, 3] | no | no | 1 | — |
 | `revision.lines[].facts.profile.item` | object | yes | no | — | — |
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
@@ -5173,6 +5211,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].gross_minor_units` | integer | yes | no | — | — |
 | `revision.lines[].currency` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot` | object | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission` | object \| null | no | yes | null | — |
+| `revision.lines[].item_snapshot.commission.enabled_at_entry` | literal[true] | no | no | true | — |
+| `revision.lines[].item_snapshot.commission.recipients` | array[object] | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.recipients[].recipient_id` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.recipients[].recipient_label` | string | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.recipients[].share` | literal[100] | no | no | 100 | — |
+| `revision.lines[].item_snapshot.commission.net_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].item_snapshot.commission.currency` | string | yes | no | — | — |
 | `revision.lines[].item_snapshot.schema_version` | literal[1, 2, 3] | no | no | 1 | — |
 | `revision.lines[].item_snapshot.item` | object | yes | no | — | — |
 | `revision.lines[].item_snapshot.item.id` | string | yes | no | — | — |
@@ -5607,6 +5653,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `settlement.prospective_pages[].request.input.use_defaults` | array[literal["sales_tax_calculation", "billing_address", "shipping_address", "terms", "due_date", "ship_method", "sales_rep", "class_id", "customer_tax_code", "sales_tax_item", "price_level", "payment_method"]] | no | no | [] | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines` | array[object] \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].commission` | object \| null | no | yes | null | Invoice attribution: exactly one sales-rep recipient with share 100; required for enabled new items when attribution is on. Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].commission.recipients` | array[object] | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].commission.recipients[].recipient` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
+| `settlement.prospective_pages[].request.input.lines[].commission.recipients[].share` | literal[100] | no | no | 100 | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].line_id` | string \| null | no | yes | null | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].item` | string | no | no | — | Present in InvoiceUpdatePreviewRequest. |
 | `settlement.prospective_pages[].request.input.lines[].quantity` | string | no | no | "1" | Present in InvoiceUpdatePreviewRequest. |
@@ -6392,6 +6442,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.markup_percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.billable` | boolean | no | no | true | — |
 | `revision.lines[].facts.profile` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.commission` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.commission.enabled_at_entry` | literal[true] | no | no | true | — |
+| `revision.lines[].facts.profile.commission.recipients` | array[object] | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.recipients[].recipient_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.recipients[].recipient_label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.recipients[].share` | literal[100] | no | no | 100 | — |
+| `revision.lines[].facts.profile.commission.net_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.currency` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.schema_version` | literal[1, 2, 3] | no | no | 1 | — |
 | `revision.lines[].facts.profile.item` | object | yes | no | — | — |
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
@@ -6893,6 +6951,8 @@ The same example as complete `bookflow_run` arguments:
 | `customer` | `--customer` | string \| null | no | yes | null | — |
 | `title` | `--title` | string \| null | no | yes | null | — |
 | `active` | `--active` | boolean | no | no | true | — |
+| `lines[].commission.recipients[].recipient` | inside `--lines` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
+| `lines[].commission.recipients[].share` | inside `--lines` JSON array | literal[100] | no | no | 100 | — |
 | `lines[].line_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
 | `lines[].item` | inside `--lines` JSON array | string | yes | no | — | minimum length 1; maximum length 1004 |
 | `lines[].quantity` | inside `--lines` JSON array | string | no | no | "1" | — |
@@ -7282,6 +7342,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.markup_percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.billable` | boolean | no | no | true | — |
 | `revision.lines[].facts.profile` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.commission` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.commission.enabled_at_entry` | literal[true] | no | no | true | — |
+| `revision.lines[].facts.profile.commission.recipients` | array[object] | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.recipients[].recipient_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.recipients[].recipient_label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.recipients[].share` | literal[100] | no | no | 100 | — |
+| `revision.lines[].facts.profile.commission.net_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.currency` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.schema_version` | literal[1, 2, 3] | no | no | 1 | — |
 | `revision.lines[].facts.profile.item` | object | yes | no | — | — |
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
@@ -8124,6 +8192,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.markup_percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.billable` | boolean | no | no | true | — |
 | `revision.lines[].facts.profile` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.commission` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.commission.enabled_at_entry` | literal[true] | no | no | true | — |
+| `revision.lines[].facts.profile.commission.recipients` | array[object] | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.recipients[].recipient_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.recipients[].recipient_label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.recipients[].share` | literal[100] | no | no | 100 | — |
+| `revision.lines[].facts.profile.commission.net_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.currency` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.schema_version` | literal[1, 2, 3] | no | no | 1 | — |
 | `revision.lines[].facts.profile.item` | object | yes | no | — | — |
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |
@@ -8974,6 +9050,14 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `revision.lines[].facts.markup_percent_millionths` | integer \| null | no | yes | null | — |
 | `revision.lines[].facts.billable` | boolean | no | no | true | — |
 | `revision.lines[].facts.profile` | object | yes | no | — | — |
+| `revision.lines[].facts.profile.commission` | object \| null | no | yes | null | — |
+| `revision.lines[].facts.profile.commission.enabled_at_entry` | literal[true] | no | no | true | — |
+| `revision.lines[].facts.profile.commission.recipients` | array[object] | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.recipients[].recipient_id` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.recipients[].recipient_label` | string | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.recipients[].share` | literal[100] | no | no | 100 | — |
+| `revision.lines[].facts.profile.commission.net_minor_units` | integer | yes | no | — | — |
+| `revision.lines[].facts.profile.commission.currency` | string | yes | no | — | — |
 | `revision.lines[].facts.profile.schema_version` | literal[1, 2, 3] | no | no | 1 | — |
 | `revision.lines[].facts.profile.item` | object | yes | no | — | — |
 | `revision.lines[].facts.profile.item.id` | string | yes | no | — | — |

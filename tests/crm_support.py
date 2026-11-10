@@ -26,19 +26,6 @@ def company(tmp_path, monkeypatch, zone='UTC'):
         shutil.copytree(Path(cache), root / 'cache')
     monkeypatch.setenv('BOOKFLOW_DATA_ROOT', str(root))
     monkeypatch.delenv('BOOKFLOW_COMPANY', raising=False)
-    # The legacy chain currently fails at co0043's settlement guard on a fresh
-    # database. CRM integration uses the shipped current schema; the co0128 to
-    # co0129 upgrade is exercised separately against a historical-shape file.
-    from bookflow.company import rollout, schema
-    from bookflow.storage.migrate import HEADS
-    def fresh_schema(db, chain, backups_dir, **kwargs):
-        assert chain == 'company'
-        schema.metadata.create_all(db.conn)
-        db.raw.execute('CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)')
-        db.raw.execute('INSERT INTO alembic_version VALUES (?)', (HEADS['company'],))
-        db.raw.commit()
-        return None, HEADS['company']
-    monkeypatch.setattr(rollout, 'migrate_to_head', fresh_schema)
     client = bookflow.connect(data_root=str(root))
     client.init()
     client.organization.new(name='CRM organization')

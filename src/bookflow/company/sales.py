@@ -512,7 +512,13 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
     """Resolve original intent without allocating any persisted effect identities."""
     if billing_source is not None:
         from bookflow.company.billing import resolve_commercial
-        return resolve_commercial(s, inp, document_type, document_id=document_id, kind=billing_source)
+        result = resolve_commercial(s, inp, document_type, document_id=document_id, kind=billing_source)
+        if document_type == 'invoice':
+            from bookflow.company import commissions
+            commissions.capture(s, document_type,
+                [SalesLineInput(item=line['item_id']) for line in result['lines']],
+                result['lines'], {}, result['currency'])
+        return result
     from bookflow.company import sales_defaults
     old_profile = SalesProfile.model_validate_json(profile_row(s, old_revision)['profile_snapshot']) if old_revision else None
     profile, warnings = sales_defaults.resolve_header(s, inp, document_type, previous=old_profile,
@@ -532,7 +538,7 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
     old_lines = saved_lines(s, old_revision) if old_revision else []
     prior = {line['line_id']: line for line in old_lines}
     entered = inp.lines if inp.lines is not None else [SalesLineInput(item=line['item_id'], line_id=line['line_id']) for line in old_lines]
-    seen, lines = set(), []
+    seen, lines, commission_inputs = set(), [], []
     from bookflow.company import placements
     header_site = placements.site_id_for(s, getattr(inp, 'site', None))
     prior_sites = placements.revision_line_sites(s, old_revision['id']) if old_revision else {}
@@ -564,6 +570,7 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
         if numbers is not None:
             resolved['numbers'] = numbers
         lines.append(resolved)
+        commission_inputs.append(line)
         warnings.extend(w for w in line_warnings if w not in warnings)
     if len(lines) > 200:
         raise _invalid('lines', 'a sale holds at most 200 lines once its groups are expanded')
@@ -573,6 +580,8 @@ def commercial(s, inp, document_type, old_header=None, old_revision=None, *, doc
     tax_ordinals, tax_keys = tax_facts.prospective(s.company, document_id, [line['line_id'] for line in lines])
     attribution = tax_facts.calculate(lines, profile, info['home_currency'], tax_ordinals)
     tax_facts.apply(lines, attribution, tax_ordinals)
+    from bookflow.company import commissions
+    commissions.capture(s, document_type, commission_inputs, lines, prior, info["home_currency"])
     from bookflow.company.billing_edits import protect_sale
     protect_sale(s, inp, old_header, old_revision, dict(profile=profile, lines=lines))
     custom.validate_kinds(s.company, inp.custom_fields, inp.custom_field_kinds, record_type=document_type)
@@ -825,6 +834,8 @@ def prepare(s, ctx, inp, document_type, operation, *, billing_source=None, _sett
     fingerprint = None
     if operation != 'void':
         resolved = commercial(s, inp, document_type, old_header, old_revision, document_id=header['id'], billing_source=billing_source)
+        if any(line['profile'].commission is not None for line in resolved['lines']) and not (ctx.reason and ctx.reason.strip()):
+            raise BookflowError('E_REASON_REQUIRED')
         warnings += resolved['warnings']
         fingerprint = resolved['fingerprint']
         changed_fields = _changes(_saved_semantic(s, old_revision), resolved['semantic']) if old_revision else []

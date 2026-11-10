@@ -1,8 +1,8 @@
-"""co0129: empty lead aggregates and native lead-linked to-dos; no customer conversion."""
+"""co0132: empty lead aggregates and native lead-linked to-dos; no customer conversion."""
 from alembic import op
 import sqlalchemy as sa
-revision = 'co0129'
-down_revision = 'co0128'
+revision = 'co0132'
+down_revision = 'co0131'
 branch_labels = depends_on = None
 TABLES = ('crm_leads', 'crm_lead_contacts', 'crm_lead_contact_points')
 COLUMNS = ('crm_pipeline_enabled', 'crm_campaigns_enabled')

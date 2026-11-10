@@ -1,0 +1,13 @@
+<section aria-label="Commission attribution" data-commission-report>
+<h2>Invoice attribution</h2>
+<p>Net sales credited to each recipient. Attribution records no commission earnings or payments.</p>
+{% for total in result.totals %}<article class="commission-attribution-card"><h3>{{ total.recipient_name }}</h3><p>{{ display_money({'minor_units': total.net_minor_units, 'currency': total.currency})|money(total.currency) }}</p></article>{% endfor %}
+{% if result.rows %}<div class="sales-document table-wrap"><table class="ledger-table sales-lines" data-commission-table><thead><tr>{% for label in ['Recipient', 'Invoice', 'Date', 'Item', 'Attributed net'] %}<th aria-sort="none"><button type="button" data-commission-sort="{{ loop.index0 }}">{{ label }}</button></th>{% endfor %}</tr></thead><tbody>
+{% for row in result.rows %}<tr>
+<td><span class="sales-cell-label">Recipient</span>{{ row.recipient_name }}</td>
+<td><span class="sales-cell-label">Invoice</span><a href="/c/{{ company_id }}/invoice/{{ row.invoice_id }}">{{ row.number }}</a></td>
+<td data-sort-value="{{ row.date }}"><span class="sales-cell-label">Date</span>{{ row.date|day }}</td>
+<td><span class="sales-cell-label">Item</span>{{ row.item_name }}</td>
+<td data-sort-value="{{ row.net_minor_units }}"><span class="sales-cell-label">Attributed net</span>{{ display_money({'minor_units': row.net_minor_units, 'currency': row.currency})|money(row.currency) }}</td>
+</tr>{% endfor %}</tbody></table></div>{% else %}<p>No attributed invoice lines in this selection.</p>{% endif %}
+</section>
