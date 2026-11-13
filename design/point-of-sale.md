@@ -258,10 +258,10 @@ Bluetooth scanner in keyboard mode keeps working exactly as today, and both can 
   over the lower half of the screen with the rear camera, a framing box and a torch toggle where the track supports it.
   Frames are decoded about 8 times a second. A decoded code goes through **the same path a typed code takes**
   (`scan.js`'s `look(field, input, text)`: one `barcode lookup`, then the mode's own placing), so a camera scan is
-  exactly a scanner scan. On a found item: one bright ping (Web Audio, a 1,319 Hz sine with a quiet octave above it, 150 ms; no audio file), a 40 ms vibration
+  exactly a scanner scan. On a found item: one high beep (Web Audio, 2,093 Hz for 110 ms, lifted into from a tone below; no audio file), a 40 ms vibration
   where supported, the item's name flashes in the overlay, and the overlay stays open for the next scan; the screen under
   it has already moved on (the pick screen to the next line, the POS cart to the new total). On an unknown code: one lower
-  falling note and the field's own "Assign to an item" message; the code waits in the field for correcting by hand, and the next
+  beep that also rises and the field's own "Assign to an item" message; the code waits in the field for correcting by hand, and the next
   camera read replaces it unless the person has changed it. The same code is not taken again until it has left the frame or
   1.5 s have passed, so holding a can still is one scan; scanning it again adds one. Close, or 60 s with no code, stops
   the camera.

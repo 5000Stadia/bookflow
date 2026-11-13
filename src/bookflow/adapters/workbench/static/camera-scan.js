@@ -17,7 +17,7 @@
 // 2. The camera in the Scan field. Each Scan field's Camera button (scan_field.html) opens an overlay over the lower
 //    half of the screen. On a secure page the rear camera runs live and about 8 frames a second are decoded; on a
 //    plain-http page each tap takes one photo. A code read goes through scan.js's own look-up (bookflowScan.scan),
-//    exactly as a typed code does; the overlay pings for a found item and sounds one falling note for an unknown one.
+//    exactly as a typed code does; the overlay beeps high for a found item and lower for an unknown one.
 (() => {
   if (window.bookflowDecoders) return;
 
@@ -504,41 +504,38 @@
   });
 
   // ---------------------------------------------------------------- sound and vibration
-  // One soft note: a sine with a quick attack and a clean fade, optionally an octave overtone for a brighter ring, or
-  // a glide to another pitch. No audio file; nothing above 4 kHz, which small speakers turn to hiss.
-  function note(frequency, length, {to = 0, overtone = 0, level = 0.25} = {}) {
+  // One beep: a single pitch with a clean start and end, optionally lifted into from a little below (a rising beep
+  // sounds cheerful; a falling one sounds sad, so nothing here falls). No audio file.
+  function beep(frequency, length, {from = 0, level = 0.2} = {}) {
     const audio = state.audio;
     const start = audio.currentTime;
     const envelope = audio.createGain();
     envelope.gain.setValueAtTime(0.0001, start);
     envelope.gain.exponentialRampToValueAtTime(level, start + 0.004);
+    envelope.gain.setValueAtTime(level, start + length - 0.02);
     envelope.gain.exponentialRampToValueAtTime(0.0001, start + length);
     envelope.connect(audio.destination);
-    for (const [multiple, share] of overtone ? [[1, 1], [2, overtone]] : [[1, 1]]) {
-      const oscillator = audio.createOscillator();
-      const mix = audio.createGain();
-      oscillator.type = 'sine';
-      oscillator.frequency.value = frequency * multiple;
-      if (to) {
-        oscillator.frequency.setValueAtTime(frequency * multiple, start);
-        oscillator.frequency.exponentialRampToValueAtTime(to * multiple, start + length);
-      }
-      mix.gain.value = share;
-      oscillator.connect(mix).connect(envelope);
-      oscillator.start(start);
-      oscillator.stop(start + length + 0.02);
+    const oscillator = audio.createOscillator();
+    oscillator.type = 'triangle';
+    oscillator.frequency.value = frequency;
+    if (from) {
+      oscillator.frequency.setValueAtTime(from, start);
+      oscillator.frequency.exponentialRampToValueAtTime(frequency, start + 0.035);
     }
+    oscillator.connect(envelope);
+    oscillator.start(start);
+    oscillator.stop(start + length + 0.02);
   }
 
-  // One sound a scan. A found item: a bright ping (E6 with a quiet octave above it, 150 ms) and a 40 ms vibration.
-  // An unknown code: one lower note that falls (E5 to B4, 200 ms) and a longer double buzz. Sound follows this
-  // device's toggle; a phone on silent still vibrates.
+  // One sound a scan. A found item: the familiar high checkout beep (2,093 Hz, 110 ms), lifted into from a tone below
+  // so it sounds bright, and a 40 ms vibration. An unknown code: one lower beep that also rises (784 to 880 Hz,
+  // 160 ms) and a longer double buzz. Sound follows this device's toggle; a phone on silent still vibrates.
   function signal(found, code) {
     const sound = !state.overlay || part('sound').checked;
     if (sound && state.audio) {
       try {
-        if (found) note(1319, 0.15, {overtone: 0.25});
-        else note(660, 0.2, {to: 494});
+        if (found) beep(2093, 0.11, {from: 1865});
+        else beep(880, 0.16, {from: 784});
       } catch (error) { /* no audio output */ }
     }
     try { navigator.vibrate?.(found ? 40 : [120, 80, 120]); } catch (error) { /* not supported */ }
