@@ -5347,19 +5347,20 @@ Deposits. Accounting/date/variance rules and limits are specified in
 [point-of-sale.md, increment 10](point-of-sale.md#as-built-increment-10-day-close).
 
 
-## Saved purchase drafts (R122 increment 1)
+## Purchase drafts and approvals (R122 increments 1–3)
 
-`company/purchase_draft_models.py`, `purchase_draft_schema.py` and `purchase_drafts.py` own expense-only bill
-creation drafts. `commands/purchase_draft_cmds.py` exposes create/update/preview/cancel/show/list. Drafts resolve
-native bill header and expense facts but never enter the posting path. Mutable headers carry exact versions;
-insert-only revisions and actor-scoped operation receipts retain changes and retry results. Cancellation preserves
-all facts. `co0129` adds these tables and four approval switches defaulting off.
+`company/purchase_drafts.py` owns saved bill and purchase-order proposals. `approvals.py` owns their shared simple
+policies, immutable requests/events, decisions and atomic commits. `approval_bill_payload.py` and
+`approval_purchase_payload.py` normalize and snapshot native calculations without source reservation. Public native
+prepare and persist doors enforce policy; only an authorized draft commit or exact correction inverse receives the
+private seal. `approval_commit_reversal.py` selects the native document owner through the same batch adapter.
 
-`permission_purchase_draft_catalog.py` extends `notice-reversal-v1` with standard approval.prepare/read plus
-ledger.read on every command. `hub/capabilities.py` requires explicit agent grants and the existing principal
-intersection. The workbench purchase-drafts route uses these commands for its htmx forms and separate draft list.
-The acceptance tests are `test_purchase_drafts.py` and `test_purchase_drafts_browser.py`; execution status belongs
-to the build report. Scope and later increments are in `design/approvals.md` section 10.
+Migration `co0139` retains the existing bill links and adds separate purchase-order RESTRICT links. The
+`purchase-approval-v1` permission layer follows `membership-sales-v1`, using existing approval and ledger rights.
+Both target switches remain off until policy publication. Submitted drafts keep their captured requirement if the
+switch is later disabled. The purchase-drafts workbench route uses shared commands and htmx for both native grids.
+The implementation boundaries and later increments are in `design/approvals.md` section 10; targeted checks are in
+`test_purchase_approvals.py` and `test_purchase_approvals_browser.py` alongside the existing bill approval tests.
 
 
 ## Intercompany setup

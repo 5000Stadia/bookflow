@@ -136,6 +136,7 @@ ACCEPTED = {
     'crm-convert-v1': (964, '93a120a2e91e0f151878d417cb63c87d3649ce9799265208e31997af2f988a3b'),
     'payroll-post-v1': (970, 'b7f6bca6de63ed276c9a9694b8d5e8a54f95d92af19d8ea377aab3c0d1fa1579'),
     'membership-sales-v1': (973, '416ee89bdba918f08467b90081426200f28d498208877a3b81bb7f81b3606e4f'),
+    'purchase-approval-v1': (973, '5671a7352e075127e5e66c35c431c26865aa56e10ea2069d1db43bcc2f1c6ee8'),
 }
 
 # The legacy bridge, read by a root that was never activated. Such a root stores
@@ -327,6 +328,7 @@ CHAIN_ADDITIONS = {
                         'payroll paycheck', 'payroll paychecks'},
     'membership-sales-v1': {'customer membership inherit', 'customer membership list',
                             'customer membership enroll'},
+    'purchase-approval-v1': set(),
 }
 
 _ANCESTOR_EDIT = """

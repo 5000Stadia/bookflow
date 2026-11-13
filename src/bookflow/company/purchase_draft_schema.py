@@ -11,20 +11,22 @@ def company_columns(C):
 
 def define_tables(metadata, C, T, common):
     drafts = T('purchase_drafts', *common(),
-        C('kind', sa.String(24), 'Target document kind; currently bill.', nullable=False),
+        C('kind', sa.String(24), 'Target document kind: bill or purchase_order.', nullable=False),
         C('operation', sa.String(16), 'Intended native operation: create, correct or restore.', nullable=False),
         C('state', sa.String(16), 'Draft lifecycle state; only commit invokes native accounting.', nullable=False),
-        C('payload', sa.Text, 'Normalized native bill fields as JSON with stable reference IDs and integer money.', nullable=False),
+        C('payload', sa.Text, 'Normalized native purchase fields as JSON with stable reference IDs and integer money.', nullable=False),
         C('preview', sa.Text, 'Exact calculated commercial snapshot as JSON.', nullable=False),
         C('original_id', sa.String(26), 'Original native bill for a correction or restoration.', sa.ForeignKey('transactions.id', ondelete='RESTRICT')),
+        C('original_order_id', sa.String(26), 'Original released purchase order for a correction.', sa.ForeignKey('purchase_orders.id', ondelete='RESTRICT')),
         C('original_version', sa.Integer, 'Exact original document version.'),
         C('snapshot', sa.Text, 'Full native commercial and source snapshot JSON.'),
         C('currency', sa.String(3), 'Company currency captured by this revision.', nullable=False),
-        sa.CheckConstraint("kind = 'bill' AND operation IN ('create','correct','restore') AND state IN ('draft','pending','approved','rejected','committed','cancelled')", name='ck_purchase_draft_scope'),
+        sa.CheckConstraint("kind IN ('bill','purchase_order') AND operation IN ('create','correct','restore') AND state IN ('draft','pending','approved','rejected','committed','cancelled')", name='ck_purchase_draft_scope'),
+        sa.CheckConstraint("(kind = 'bill' AND original_order_id IS NULL) OR (kind = 'purchase_order' AND original_id IS NULL)", name='ck_purchase_draft_original_kind'),
         sa.CheckConstraint('version >= 1', name='ck_purchase_draft_version'),
         sa.CheckConstraint('json_valid(payload) AND json_valid(preview)', name='ck_purchase_draft_json'),
         sa.Index('ix_purchase_drafts_state_id', 'state', 'id'),
-        description='Saved bill proposals, separate from native documents until commit.')
+        description='Saved purchase proposals, separate from native documents until commit.')
     revisions = T('purchase_draft_revisions',
         C('id', sa.String(26), 'Immutable revision ULID.', primary_key=True),
         C('draft_id', sa.String(26), 'Owning saved draft.', sa.ForeignKey('purchase_drafts.id', ondelete='RESTRICT'), nullable=False),

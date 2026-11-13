@@ -38,8 +38,8 @@ _HEADER = (
 _ENTRY_ERRORS = ['E_RECORD_NOT_FOUND', 'E_INACTIVE_REFERENCE', 'E_VALIDATION', 'E_VALUE_RANGE',
                  'E_AMOUNT_PRECISION', 'E_DUPLICATE_NUMBER']
 WRITE_ERRORS = {
-    'post': _ENTRY_ERRORS,
-    'update': _ENTRY_ERRORS + ['E_VERSION_CONFLICT', 'E_WORK_DEPENDENCY'],
+    'post': _ENTRY_ERRORS + ['E_APPROVAL_REQUIRED'],
+    'update': _ENTRY_ERRORS + ['E_VERSION_CONFLICT', 'E_WORK_DEPENDENCY', 'E_APPROVAL_REQUIRED'],
     'void': ['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_VALIDATION', 'E_REASON_REQUIRED',
              'E_WORK_DEPENDENCY'],
 }
@@ -77,7 +77,7 @@ def _write(verb, model):
         return purchase_orders.prepare(s, ctx, inp, verb)
 
     cmd = command(
-        'purchase-order ' + verb, scope='company', description=DESCRIPTIONS[verb],
+        'purchase-order ' + verb, scope='company', description=DESCRIPTIONS[verb] + (' When purchase approvals are enabled, direct release and correction refuse E_APPROVAL_REQUIRED; use purchase-draft create, submit and commit.' if verb in ('post', 'update') else ''),
         input_model=model, output_model=PurchaseOrderWriteOutput, writes={'company'},
         required_role='standard', capability='ledger.post', accepts_idempotency_key=True,
         positional=[] if verb == 'post' else ['purchase_order'], clearable=verb == 'update',

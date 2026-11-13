@@ -12,7 +12,8 @@ Database: `company`.
 | `request_id` | VARCHAR(26) | yes | — | — | — | approval_requests.id | Captured approval request, absent for layer-off drafts. |
 | `draft_id` | VARCHAR(26) | no | — | — | — | purchase_drafts.id | Producing draft. |
 | `draft_version` | INTEGER | no | — | — | — | — | Committed draft revision. |
-| `document_id` | VARCHAR(26) | no | — | — | — | transactions.id | Native bill. |
+| `document_id` | VARCHAR(26) | yes | — | — | — | transactions.id | Native bill. |
+| `order_id` | VARCHAR(26) | yes | — | — | — | purchase_orders.id | Released purchase order; exactly one native document is linked. |
 | `document_version` | INTEGER | no | — | — | — | — | Produced native version. |
 | `operation` | VARCHAR(16) | no | — | — | — | — | create or correct. |
 | `batch_id` | VARCHAR(26) | no | — | unique | — | batches.id | Reversible unit. |

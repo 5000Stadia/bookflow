@@ -4,7 +4,7 @@
 
 ## `purchase-draft cancel`
 
-Cancel a saved bill draft with expected_version, operation_key and reason. Preserve every revision and attribution; cancellation has no accounting effect and cannot be undone.
+Cancel a saved purchase draft with expected_version, operation_key and reason. Preserve every revision and attribution; cancellation has no accounting effect and cannot be undone.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -80,7 +80,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `request_version` | integer \| null | no | yes | null | — |
 | `id` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
-| `kind` | literal["bill"] | yes | no | — | — |
+| `kind` | literal["bill", "purchase_order"] | yes | no | — | — |
 | `operation` | literal["create", "correct", "restore"] | yes | no | — | — |
 | `original_id` | string \| null | no | yes | null | — |
 | `original_version` | integer \| null | no | yes | null | — |
@@ -97,6 +97,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
 | `payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
+| `payload.lines` | array[object] \| null | no | yes | null | — |
+| `payload.lines[].line_id` | string \| null | no | yes | null | — |
+| `payload.lines[].item` | string \| null | no | yes | null | — |
+| `payload.lines[].account` | string \| null | no | yes | null | — |
+| `payload.lines[].description` | string \| null | no | yes | null | — |
+| `payload.lines[].quantity` | string \| null | no | yes | null | — |
+| `payload.lines[].rate` | string \| object \| null | no | yes | null | — |
+| `payload.lines[].amount` | string \| object \| null | no | yes | null | — |
+| `payload.lines[].customer` | string \| null | no | yes | null | — |
+| `payload.lines[].billable` | boolean | no | no | false | — |
+| `payload.lines[].class_id` | string \| null | no | yes | null | — |
+| `payload.lines[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `payload.lines[].site` | string \| null | no | yes | null | Inventory site an item line is to arrive at, by id or name; omitted, the order's site, else the default site. |
+| `payload.expected_date` | string \| null | no | yes | null | — |
+| `payload.ship_to` | string \| null | no | yes | null | — |
+| `payload.reference` | string \| null | no | yes | null | — |
+| `payload.status` | literal["open", "partly_received", "closed"] \| null | no | yes | null | — |
 | `payload.date` | string | yes | no | — | — |
 | `payload.vendor` | string \| null | no | yes | null | — |
 | `payload.expenses` | array[object] \| null | no | yes | null | — |
@@ -141,7 +158,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.total.amount` | string | yes | no | — | — |
 | `preview.total.currency` | string | yes | no | — | — |
 | `preview.total.minor_units` | integer | yes | no | — | — |
-| `preview.expenses` | array[object] | yes | no | — | — |
+| `preview.expenses` | array[object] | no | no | [] | — |
 | `preview.expenses[].account` | object | yes | no | — | — |
 | `preview.expenses[].account.id` | string | yes | no | — | — |
 | `preview.expenses[].account.name` | string | yes | no | — | — |
@@ -157,6 +174,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `preview.expenses[].billable` | boolean | yes | no | — | — |
+| `preview.lines` | array[object] | no | no | [] | — |
+| `preview.lines[].item` | object \| null | no | yes | null | — |
+| `preview.lines[].item.id` | string | yes | no | — | — |
+| `preview.lines[].item.name` | string | yes | no | — | — |
+| `preview.lines[].account` | object \| null | no | yes | null | — |
+| `preview.lines[].account.id` | string | yes | no | — | — |
+| `preview.lines[].account.name` | string | yes | no | — | — |
+| `preview.lines[].description` | string \| null | no | yes | null | — |
+| `preview.lines[].quantity` | string \| null | no | yes | null | — |
+| `preview.lines[].rate` | object \| null | no | yes | null | — |
+| `preview.lines[].rate.amount` | string | yes | no | — | — |
+| `preview.lines[].rate.currency` | string | yes | no | — | — |
+| `preview.lines[].rate.minor_units` | integer | yes | no | — | — |
+| `preview.lines[].amount` | object | yes | no | — | — |
+| `preview.lines[].amount.amount` | string | yes | no | — | — |
+| `preview.lines[].amount.currency` | string | yes | no | — | — |
+| `preview.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `preview.items` | array[object] | no | no | [] | — |
 | `preview.items[].item` | object | yes | no | — | — |
 | `preview.items[].item.id` | string | yes | no | — | — |
@@ -181,10 +215,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.vendor` | object | yes | no | — | — |
 | `preview.vendor.id` | string | yes | no | — | — |
 | `preview.vendor.name` | string | yes | no | — | — |
-| `preview.ap_account` | object | yes | no | — | — |
+| `preview.ap_account` | object \| null | no | yes | null | — |
 | `preview.ap_account.id` | string | yes | no | — | — |
 | `preview.ap_account.name` | string | yes | no | — | — |
-| `preview.due_date` | string | yes | no | — | — |
+| `preview.due_date` | string \| null | no | yes | null | — |
 | `preview.currency` | string | yes | no | — | — |
 | `preview.accounting_effect` | literal["none"] | no | no | "none" | — |
 | `created_at` | string | yes | no | — | — |
@@ -206,6 +240,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `history[].payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
 | `history[].payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
+| `history[].payload.lines` | array[object] \| null | no | yes | null | — |
+| `history[].payload.lines[].line_id` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].item` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].account` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].description` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].quantity` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].rate` | string \| object \| null | no | yes | null | — |
+| `history[].payload.lines[].amount` | string \| object \| null | no | yes | null | — |
+| `history[].payload.lines[].customer` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].billable` | boolean | no | no | false | — |
+| `history[].payload.lines[].class_id` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `history[].payload.lines[].site` | string \| null | no | yes | null | Inventory site an item line is to arrive at, by id or name; omitted, the order's site, else the default site. |
+| `history[].payload.expected_date` | string \| null | no | yes | null | — |
+| `history[].payload.ship_to` | string \| null | no | yes | null | — |
+| `history[].payload.reference` | string \| null | no | yes | null | — |
+| `history[].payload.status` | literal["open", "partly_received", "closed"] \| null | no | yes | null | — |
 | `history[].payload.date` | string | yes | no | — | — |
 | `history[].payload.vendor` | string \| null | no | yes | null | — |
 | `history[].payload.expenses` | array[object] \| null | no | yes | null | — |
@@ -250,7 +301,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.total.amount` | string | yes | no | — | — |
 | `history[].preview.total.currency` | string | yes | no | — | — |
 | `history[].preview.total.minor_units` | integer | yes | no | — | — |
-| `history[].preview.expenses` | array[object] | yes | no | — | — |
+| `history[].preview.expenses` | array[object] | no | no | [] | — |
 | `history[].preview.expenses[].account` | object | yes | no | — | — |
 | `history[].preview.expenses[].account.id` | string | yes | no | — | — |
 | `history[].preview.expenses[].account.name` | string | yes | no | — | — |
@@ -266,6 +317,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `history[].preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `history[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `history[].preview.lines` | array[object] | no | no | [] | — |
+| `history[].preview.lines[].item` | object \| null | no | yes | null | — |
+| `history[].preview.lines[].item.id` | string | yes | no | — | — |
+| `history[].preview.lines[].item.name` | string | yes | no | — | — |
+| `history[].preview.lines[].account` | object \| null | no | yes | null | — |
+| `history[].preview.lines[].account.id` | string | yes | no | — | — |
+| `history[].preview.lines[].account.name` | string | yes | no | — | — |
+| `history[].preview.lines[].description` | string \| null | no | yes | null | — |
+| `history[].preview.lines[].quantity` | string \| null | no | yes | null | — |
+| `history[].preview.lines[].rate` | object \| null | no | yes | null | — |
+| `history[].preview.lines[].rate.amount` | string | yes | no | — | — |
+| `history[].preview.lines[].rate.currency` | string | yes | no | — | — |
+| `history[].preview.lines[].rate.minor_units` | integer | yes | no | — | — |
+| `history[].preview.lines[].amount` | object | yes | no | — | — |
+| `history[].preview.lines[].amount.amount` | string | yes | no | — | — |
+| `history[].preview.lines[].amount.currency` | string | yes | no | — | — |
+| `history[].preview.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `history[].preview.items` | array[object] | no | no | [] | — |
 | `history[].preview.items[].item` | object | yes | no | — | — |
 | `history[].preview.items[].item.id` | string | yes | no | — | — |
@@ -290,10 +358,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.vendor` | object | yes | no | — | — |
 | `history[].preview.vendor.id` | string | yes | no | — | — |
 | `history[].preview.vendor.name` | string | yes | no | — | — |
-| `history[].preview.ap_account` | object | yes | no | — | — |
+| `history[].preview.ap_account` | object \| null | no | yes | null | — |
 | `history[].preview.ap_account.id` | string | yes | no | — | — |
 | `history[].preview.ap_account.name` | string | yes | no | — | — |
-| `history[].preview.due_date` | string | yes | no | — | — |
+| `history[].preview.due_date` | string \| null | no | yes | null | — |
 | `history[].preview.currency` | string | yes | no | — | — |
 | `history[].preview.accounting_effect` | literal["none"] | no | no | "none" | — |
 | `history[].actor` | string | yes | no | — | — |
@@ -322,28 +390,31 @@ Example JSON output:
     "custom_fields": {},
     "date": "2026-01-01",
     "due_date": null,
+    "expected_date": null,
     "expenses": null,
     "items": null,
+    "lines": null,
     "memo": null,
     "number": null,
     "order_lines": null,
     "purchase_order": null,
     "receipts": null,
+    "reference": null,
+    "ship_to": null,
     "site": null,
+    "status": null,
     "supplier_reference": null,
     "terms": null,
     "vendor": null
   },
   "preview": {
     "accounting_effect": "none",
-    "ap_account": {
-      "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-      "name": "value"
-    },
+    "ap_account": null,
     "currency": "USD",
-    "due_date": "2026-01-01",
+    "due_date": null,
     "expenses": [],
     "items": [],
+    "lines": [],
     "purchase_order": null,
     "receipts": [],
     "total": {
@@ -405,7 +476,7 @@ Example JSON output:
 
 ## `purchase-draft commit`
 
-Post an approved bill or commit a saved draft with approvals off. Revalidates exact source and commercial evidence and current native posting rights; creates one reversible batch. Supply request version when approved.
+Release an approved purchase order, post an approved bill, or commit a saved draft with approvals off. Revalidates exact source and commercial evidence and current native posting rights; creates one reversible batch. Supply request version when approved.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -546,7 +617,7 @@ Example JSON output:
 
 ## `purchase-draft create`
 
-Save a native bill draft with a reason and permanent operation_key. The draft posts nothing: no AP, ledger, inventory or purchase consumption. Use --dry-run for an exact unsaved preview. kind is bill; operation is create or correct with original_id and original_version. Sources and exact amounts are captured without reservations. Restore awaits native bill restoration. Another preparer can resume its shared ID.
+Save a native purchase draft with a reason and permanent operation_key. The draft posts nothing: no AP, ledger, inventory or purchase consumption. Use --dry-run for an exact unsaved preview. kind is bill or purchase_order; operation is create or correct with original_id and original_version. Sources and exact amounts are captured without reservations. Restore awaits native bill restoration. Another preparer can resume its shared ID.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -588,6 +659,22 @@ The same example as complete `bookflow_run` arguments:
 | `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
+| `lines[].line_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
+| `lines[].item` | inside `--lines` JSON array | string \| null | no | yes | null | — |
+| `lines[].account` | inside `--lines` JSON array | string \| null | no | yes | null | — |
+| `lines[].description` | inside `--lines` JSON array | string \| null | no | yes | null | — |
+| `lines[].quantity` | inside `--lines` JSON array | string \| null | no | yes | null | — |
+| `lines[].rate` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
+| `lines[].amount` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
+| `lines[].customer` | inside `--lines` JSON array | string \| null | no | yes | null | — |
+| `lines[].billable` | inside `--lines` JSON array | boolean | no | no | false | — |
+| `lines[].class_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
+| `lines[].class_mode` | inside `--lines` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `lines[].site` | inside `--lines` JSON array | string \| null | no | yes | null | Inventory site an item line is to arrive at, by id or name; omitted, the order's site, else the default site. |
+| `expected_date` | `--expected-date` | string \| null | no | yes | null | — |
+| `ship_to` | `--ship-to` | string \| null | no | yes | null | — |
+| `reference` | `--reference` | string \| null | no | yes | null | — |
+| `status` | `--status` | literal["open", "partly_received", "closed"] \| null | no | yes | null | — |
 | `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
 | `vendor` | `--vendor` | string \| null | no | yes | null | — |
 | `expenses[].line_id` | inside `--expenses` JSON array | string \| null | no | yes | null | — |
@@ -623,7 +710,7 @@ The same example as complete `bookflow_run` arguments:
 | `receipts[].quantity` | inside `--receipts` JSON array | string | yes | no | — | — |
 | `receipts[].unit_cost` | inside `--receipts` JSON array | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
 | `receipts[].amount` | inside `--receipts` JSON array | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
-| `kind` | `--kind` | literal["bill"] | no | no | "bill" | — |
+| `kind` | `--kind` | literal["bill", "purchase_order"] | no | no | "bill" | — |
 | `operation` | `--operation` | literal["create", "correct", "restore"] | no | no | "create" | — |
 | `original_id` | `--original-id` | string \| null | no | yes | null | — |
 | `original_version` | `--original-version` | integer \| null | no | yes | null | — |
@@ -670,7 +757,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `request_version` | integer \| null | no | yes | null | — |
 | `id` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
-| `kind` | literal["bill"] | yes | no | — | — |
+| `kind` | literal["bill", "purchase_order"] | yes | no | — | — |
 | `operation` | literal["create", "correct", "restore"] | yes | no | — | — |
 | `original_id` | string \| null | no | yes | null | — |
 | `original_version` | integer \| null | no | yes | null | — |
@@ -687,6 +774,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
 | `payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
+| `payload.lines` | array[object] \| null | no | yes | null | — |
+| `payload.lines[].line_id` | string \| null | no | yes | null | — |
+| `payload.lines[].item` | string \| null | no | yes | null | — |
+| `payload.lines[].account` | string \| null | no | yes | null | — |
+| `payload.lines[].description` | string \| null | no | yes | null | — |
+| `payload.lines[].quantity` | string \| null | no | yes | null | — |
+| `payload.lines[].rate` | string \| object \| null | no | yes | null | — |
+| `payload.lines[].amount` | string \| object \| null | no | yes | null | — |
+| `payload.lines[].customer` | string \| null | no | yes | null | — |
+| `payload.lines[].billable` | boolean | no | no | false | — |
+| `payload.lines[].class_id` | string \| null | no | yes | null | — |
+| `payload.lines[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `payload.lines[].site` | string \| null | no | yes | null | Inventory site an item line is to arrive at, by id or name; omitted, the order's site, else the default site. |
+| `payload.expected_date` | string \| null | no | yes | null | — |
+| `payload.ship_to` | string \| null | no | yes | null | — |
+| `payload.reference` | string \| null | no | yes | null | — |
+| `payload.status` | literal["open", "partly_received", "closed"] \| null | no | yes | null | — |
 | `payload.date` | string | yes | no | — | — |
 | `payload.vendor` | string \| null | no | yes | null | — |
 | `payload.expenses` | array[object] \| null | no | yes | null | — |
@@ -731,7 +835,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.total.amount` | string | yes | no | — | — |
 | `preview.total.currency` | string | yes | no | — | — |
 | `preview.total.minor_units` | integer | yes | no | — | — |
-| `preview.expenses` | array[object] | yes | no | — | — |
+| `preview.expenses` | array[object] | no | no | [] | — |
 | `preview.expenses[].account` | object | yes | no | — | — |
 | `preview.expenses[].account.id` | string | yes | no | — | — |
 | `preview.expenses[].account.name` | string | yes | no | — | — |
@@ -747,6 +851,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `preview.expenses[].billable` | boolean | yes | no | — | — |
+| `preview.lines` | array[object] | no | no | [] | — |
+| `preview.lines[].item` | object \| null | no | yes | null | — |
+| `preview.lines[].item.id` | string | yes | no | — | — |
+| `preview.lines[].item.name` | string | yes | no | — | — |
+| `preview.lines[].account` | object \| null | no | yes | null | — |
+| `preview.lines[].account.id` | string | yes | no | — | — |
+| `preview.lines[].account.name` | string | yes | no | — | — |
+| `preview.lines[].description` | string \| null | no | yes | null | — |
+| `preview.lines[].quantity` | string \| null | no | yes | null | — |
+| `preview.lines[].rate` | object \| null | no | yes | null | — |
+| `preview.lines[].rate.amount` | string | yes | no | — | — |
+| `preview.lines[].rate.currency` | string | yes | no | — | — |
+| `preview.lines[].rate.minor_units` | integer | yes | no | — | — |
+| `preview.lines[].amount` | object | yes | no | — | — |
+| `preview.lines[].amount.amount` | string | yes | no | — | — |
+| `preview.lines[].amount.currency` | string | yes | no | — | — |
+| `preview.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `preview.items` | array[object] | no | no | [] | — |
 | `preview.items[].item` | object | yes | no | — | — |
 | `preview.items[].item.id` | string | yes | no | — | — |
@@ -771,10 +892,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.vendor` | object | yes | no | — | — |
 | `preview.vendor.id` | string | yes | no | — | — |
 | `preview.vendor.name` | string | yes | no | — | — |
-| `preview.ap_account` | object | yes | no | — | — |
+| `preview.ap_account` | object \| null | no | yes | null | — |
 | `preview.ap_account.id` | string | yes | no | — | — |
 | `preview.ap_account.name` | string | yes | no | — | — |
-| `preview.due_date` | string | yes | no | — | — |
+| `preview.due_date` | string \| null | no | yes | null | — |
 | `preview.currency` | string | yes | no | — | — |
 | `preview.accounting_effect` | literal["none"] | no | no | "none" | — |
 | `created_at` | string | yes | no | — | — |
@@ -796,6 +917,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `history[].payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
 | `history[].payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
+| `history[].payload.lines` | array[object] \| null | no | yes | null | — |
+| `history[].payload.lines[].line_id` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].item` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].account` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].description` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].quantity` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].rate` | string \| object \| null | no | yes | null | — |
+| `history[].payload.lines[].amount` | string \| object \| null | no | yes | null | — |
+| `history[].payload.lines[].customer` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].billable` | boolean | no | no | false | — |
+| `history[].payload.lines[].class_id` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `history[].payload.lines[].site` | string \| null | no | yes | null | Inventory site an item line is to arrive at, by id or name; omitted, the order's site, else the default site. |
+| `history[].payload.expected_date` | string \| null | no | yes | null | — |
+| `history[].payload.ship_to` | string \| null | no | yes | null | — |
+| `history[].payload.reference` | string \| null | no | yes | null | — |
+| `history[].payload.status` | literal["open", "partly_received", "closed"] \| null | no | yes | null | — |
 | `history[].payload.date` | string | yes | no | — | — |
 | `history[].payload.vendor` | string \| null | no | yes | null | — |
 | `history[].payload.expenses` | array[object] \| null | no | yes | null | — |
@@ -840,7 +978,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.total.amount` | string | yes | no | — | — |
 | `history[].preview.total.currency` | string | yes | no | — | — |
 | `history[].preview.total.minor_units` | integer | yes | no | — | — |
-| `history[].preview.expenses` | array[object] | yes | no | — | — |
+| `history[].preview.expenses` | array[object] | no | no | [] | — |
 | `history[].preview.expenses[].account` | object | yes | no | — | — |
 | `history[].preview.expenses[].account.id` | string | yes | no | — | — |
 | `history[].preview.expenses[].account.name` | string | yes | no | — | — |
@@ -856,6 +994,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `history[].preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `history[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `history[].preview.lines` | array[object] | no | no | [] | — |
+| `history[].preview.lines[].item` | object \| null | no | yes | null | — |
+| `history[].preview.lines[].item.id` | string | yes | no | — | — |
+| `history[].preview.lines[].item.name` | string | yes | no | — | — |
+| `history[].preview.lines[].account` | object \| null | no | yes | null | — |
+| `history[].preview.lines[].account.id` | string | yes | no | — | — |
+| `history[].preview.lines[].account.name` | string | yes | no | — | — |
+| `history[].preview.lines[].description` | string \| null | no | yes | null | — |
+| `history[].preview.lines[].quantity` | string \| null | no | yes | null | — |
+| `history[].preview.lines[].rate` | object \| null | no | yes | null | — |
+| `history[].preview.lines[].rate.amount` | string | yes | no | — | — |
+| `history[].preview.lines[].rate.currency` | string | yes | no | — | — |
+| `history[].preview.lines[].rate.minor_units` | integer | yes | no | — | — |
+| `history[].preview.lines[].amount` | object | yes | no | — | — |
+| `history[].preview.lines[].amount.amount` | string | yes | no | — | — |
+| `history[].preview.lines[].amount.currency` | string | yes | no | — | — |
+| `history[].preview.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `history[].preview.items` | array[object] | no | no | [] | — |
 | `history[].preview.items[].item` | object | yes | no | — | — |
 | `history[].preview.items[].item.id` | string | yes | no | — | — |
@@ -880,10 +1035,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.vendor` | object | yes | no | — | — |
 | `history[].preview.vendor.id` | string | yes | no | — | — |
 | `history[].preview.vendor.name` | string | yes | no | — | — |
-| `history[].preview.ap_account` | object | yes | no | — | — |
+| `history[].preview.ap_account` | object \| null | no | yes | null | — |
 | `history[].preview.ap_account.id` | string | yes | no | — | — |
 | `history[].preview.ap_account.name` | string | yes | no | — | — |
-| `history[].preview.due_date` | string | yes | no | — | — |
+| `history[].preview.due_date` | string \| null | no | yes | null | — |
 | `history[].preview.currency` | string | yes | no | — | — |
 | `history[].preview.accounting_effect` | literal["none"] | no | no | "none" | — |
 | `history[].actor` | string | yes | no | — | — |
@@ -912,28 +1067,31 @@ Example JSON output:
     "custom_fields": {},
     "date": "2026-01-01",
     "due_date": null,
+    "expected_date": null,
     "expenses": null,
     "items": null,
+    "lines": null,
     "memo": null,
     "number": null,
     "order_lines": null,
     "purchase_order": null,
     "receipts": null,
+    "reference": null,
+    "ship_to": null,
     "site": null,
+    "status": null,
     "supplier_reference": null,
     "terms": null,
     "vendor": null
   },
   "preview": {
     "accounting_effect": "none",
-    "ap_account": {
-      "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-      "name": "value"
-    },
+    "ap_account": null,
     "currency": "USD",
-    "due_date": "2026-01-01",
+    "due_date": null,
     "expenses": [],
     "items": [],
+    "lines": [],
     "purchase_order": null,
     "receipts": [],
     "total": {
@@ -995,7 +1153,7 @@ Example JSON output:
 
 ## `purchase-draft list`
 
-List saved bill drafts in stable ID order, optionally by lifecycle state. Continue with next_cursor; a cursor belongs to its state filter. These records never appear in AP aging or posted bill lists.
+List saved purchase drafts in stable ID order, optionally by lifecycle state. Continue with next_cursor; a cursor belongs to its state filter. These records never appear in AP aging or posted bill lists.
 
 | Contract | Value |
 |---|---|
@@ -1060,7 +1218,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].request_version` | integer \| null | no | yes | null | — |
 | `items[].id` | string | yes | no | — | — |
 | `items[].version` | integer | yes | no | — | — |
-| `items[].kind` | literal["bill"] | yes | no | — | — |
+| `items[].kind` | literal["bill", "purchase_order"] | yes | no | — | — |
 | `items[].operation` | literal["create", "correct", "restore"] | yes | no | — | — |
 | `items[].original_id` | string \| null | no | yes | null | — |
 | `items[].original_version` | integer \| null | no | yes | null | — |
@@ -1077,6 +1235,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `items[].payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
 | `items[].payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
+| `items[].payload.lines` | array[object] \| null | no | yes | null | — |
+| `items[].payload.lines[].line_id` | string \| null | no | yes | null | — |
+| `items[].payload.lines[].item` | string \| null | no | yes | null | — |
+| `items[].payload.lines[].account` | string \| null | no | yes | null | — |
+| `items[].payload.lines[].description` | string \| null | no | yes | null | — |
+| `items[].payload.lines[].quantity` | string \| null | no | yes | null | — |
+| `items[].payload.lines[].rate` | string \| object \| null | no | yes | null | — |
+| `items[].payload.lines[].amount` | string \| object \| null | no | yes | null | — |
+| `items[].payload.lines[].customer` | string \| null | no | yes | null | — |
+| `items[].payload.lines[].billable` | boolean | no | no | false | — |
+| `items[].payload.lines[].class_id` | string \| null | no | yes | null | — |
+| `items[].payload.lines[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `items[].payload.lines[].site` | string \| null | no | yes | null | Inventory site an item line is to arrive at, by id or name; omitted, the order's site, else the default site. |
+| `items[].payload.expected_date` | string \| null | no | yes | null | — |
+| `items[].payload.ship_to` | string \| null | no | yes | null | — |
+| `items[].payload.reference` | string \| null | no | yes | null | — |
+| `items[].payload.status` | literal["open", "partly_received", "closed"] \| null | no | yes | null | — |
 | `items[].payload.date` | string | yes | no | — | — |
 | `items[].payload.vendor` | string \| null | no | yes | null | — |
 | `items[].payload.expenses` | array[object] \| null | no | yes | null | — |
@@ -1121,7 +1296,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].preview.total.amount` | string | yes | no | — | — |
 | `items[].preview.total.currency` | string | yes | no | — | — |
 | `items[].preview.total.minor_units` | integer | yes | no | — | — |
-| `items[].preview.expenses` | array[object] | yes | no | — | — |
+| `items[].preview.expenses` | array[object] | no | no | [] | — |
 | `items[].preview.expenses[].account` | object | yes | no | — | — |
 | `items[].preview.expenses[].account.id` | string | yes | no | — | — |
 | `items[].preview.expenses[].account.name` | string | yes | no | — | — |
@@ -1137,6 +1312,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `items[].preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `items[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `items[].preview.lines` | array[object] | no | no | [] | — |
+| `items[].preview.lines[].item` | object \| null | no | yes | null | — |
+| `items[].preview.lines[].item.id` | string | yes | no | — | — |
+| `items[].preview.lines[].item.name` | string | yes | no | — | — |
+| `items[].preview.lines[].account` | object \| null | no | yes | null | — |
+| `items[].preview.lines[].account.id` | string | yes | no | — | — |
+| `items[].preview.lines[].account.name` | string | yes | no | — | — |
+| `items[].preview.lines[].description` | string \| null | no | yes | null | — |
+| `items[].preview.lines[].quantity` | string \| null | no | yes | null | — |
+| `items[].preview.lines[].rate` | object \| null | no | yes | null | — |
+| `items[].preview.lines[].rate.amount` | string | yes | no | — | — |
+| `items[].preview.lines[].rate.currency` | string | yes | no | — | — |
+| `items[].preview.lines[].rate.minor_units` | integer | yes | no | — | — |
+| `items[].preview.lines[].amount` | object | yes | no | — | — |
+| `items[].preview.lines[].amount.amount` | string | yes | no | — | — |
+| `items[].preview.lines[].amount.currency` | string | yes | no | — | — |
+| `items[].preview.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `items[].preview.items` | array[object] | no | no | [] | — |
 | `items[].preview.items[].item` | object | yes | no | — | — |
 | `items[].preview.items[].item.id` | string | yes | no | — | — |
@@ -1161,10 +1353,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].preview.vendor` | object | yes | no | — | — |
 | `items[].preview.vendor.id` | string | yes | no | — | — |
 | `items[].preview.vendor.name` | string | yes | no | — | — |
-| `items[].preview.ap_account` | object | yes | no | — | — |
+| `items[].preview.ap_account` | object \| null | no | yes | null | — |
 | `items[].preview.ap_account.id` | string | yes | no | — | — |
 | `items[].preview.ap_account.name` | string | yes | no | — | — |
-| `items[].preview.due_date` | string | yes | no | — | — |
+| `items[].preview.due_date` | string \| null | no | yes | null | — |
 | `items[].preview.currency` | string | yes | no | — | — |
 | `items[].preview.accounting_effect` | literal["none"] | no | no | "none" | — |
 | `items[].created_at` | string | yes | no | — | — |
@@ -1186,6 +1378,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].history[].payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `items[].history[].payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
 | `items[].history[].payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
+| `items[].history[].payload.lines` | array[object] \| null | no | yes | null | — |
+| `items[].history[].payload.lines[].line_id` | string \| null | no | yes | null | — |
+| `items[].history[].payload.lines[].item` | string \| null | no | yes | null | — |
+| `items[].history[].payload.lines[].account` | string \| null | no | yes | null | — |
+| `items[].history[].payload.lines[].description` | string \| null | no | yes | null | — |
+| `items[].history[].payload.lines[].quantity` | string \| null | no | yes | null | — |
+| `items[].history[].payload.lines[].rate` | string \| object \| null | no | yes | null | — |
+| `items[].history[].payload.lines[].amount` | string \| object \| null | no | yes | null | — |
+| `items[].history[].payload.lines[].customer` | string \| null | no | yes | null | — |
+| `items[].history[].payload.lines[].billable` | boolean | no | no | false | — |
+| `items[].history[].payload.lines[].class_id` | string \| null | no | yes | null | — |
+| `items[].history[].payload.lines[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `items[].history[].payload.lines[].site` | string \| null | no | yes | null | Inventory site an item line is to arrive at, by id or name; omitted, the order's site, else the default site. |
+| `items[].history[].payload.expected_date` | string \| null | no | yes | null | — |
+| `items[].history[].payload.ship_to` | string \| null | no | yes | null | — |
+| `items[].history[].payload.reference` | string \| null | no | yes | null | — |
+| `items[].history[].payload.status` | literal["open", "partly_received", "closed"] \| null | no | yes | null | — |
 | `items[].history[].payload.date` | string | yes | no | — | — |
 | `items[].history[].payload.vendor` | string \| null | no | yes | null | — |
 | `items[].history[].payload.expenses` | array[object] \| null | no | yes | null | — |
@@ -1230,7 +1439,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].history[].preview.total.amount` | string | yes | no | — | — |
 | `items[].history[].preview.total.currency` | string | yes | no | — | — |
 | `items[].history[].preview.total.minor_units` | integer | yes | no | — | — |
-| `items[].history[].preview.expenses` | array[object] | yes | no | — | — |
+| `items[].history[].preview.expenses` | array[object] | no | no | [] | — |
 | `items[].history[].preview.expenses[].account` | object | yes | no | — | — |
 | `items[].history[].preview.expenses[].account.id` | string | yes | no | — | — |
 | `items[].history[].preview.expenses[].account.name` | string | yes | no | — | — |
@@ -1246,6 +1455,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].history[].preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `items[].history[].preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `items[].history[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `items[].history[].preview.lines` | array[object] | no | no | [] | — |
+| `items[].history[].preview.lines[].item` | object \| null | no | yes | null | — |
+| `items[].history[].preview.lines[].item.id` | string | yes | no | — | — |
+| `items[].history[].preview.lines[].item.name` | string | yes | no | — | — |
+| `items[].history[].preview.lines[].account` | object \| null | no | yes | null | — |
+| `items[].history[].preview.lines[].account.id` | string | yes | no | — | — |
+| `items[].history[].preview.lines[].account.name` | string | yes | no | — | — |
+| `items[].history[].preview.lines[].description` | string \| null | no | yes | null | — |
+| `items[].history[].preview.lines[].quantity` | string \| null | no | yes | null | — |
+| `items[].history[].preview.lines[].rate` | object \| null | no | yes | null | — |
+| `items[].history[].preview.lines[].rate.amount` | string | yes | no | — | — |
+| `items[].history[].preview.lines[].rate.currency` | string | yes | no | — | — |
+| `items[].history[].preview.lines[].rate.minor_units` | integer | yes | no | — | — |
+| `items[].history[].preview.lines[].amount` | object | yes | no | — | — |
+| `items[].history[].preview.lines[].amount.amount` | string | yes | no | — | — |
+| `items[].history[].preview.lines[].amount.currency` | string | yes | no | — | — |
+| `items[].history[].preview.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `items[].history[].preview.items` | array[object] | no | no | [] | — |
 | `items[].history[].preview.items[].item` | object | yes | no | — | — |
 | `items[].history[].preview.items[].item.id` | string | yes | no | — | — |
@@ -1270,10 +1496,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].history[].preview.vendor` | object | yes | no | — | — |
 | `items[].history[].preview.vendor.id` | string | yes | no | — | — |
 | `items[].history[].preview.vendor.name` | string | yes | no | — | — |
-| `items[].history[].preview.ap_account` | object | yes | no | — | — |
+| `items[].history[].preview.ap_account` | object \| null | no | yes | null | — |
 | `items[].history[].preview.ap_account.id` | string | yes | no | — | — |
 | `items[].history[].preview.ap_account.name` | string | yes | no | — | — |
-| `items[].history[].preview.due_date` | string | yes | no | — | — |
+| `items[].history[].preview.due_date` | string \| null | no | yes | null | — |
 | `items[].history[].preview.currency` | string | yes | no | — | — |
 | `items[].history[].preview.accounting_effect` | literal["none"] | no | no | "none" | — |
 | `items[].history[].actor` | string | yes | no | — | — |
@@ -1324,7 +1550,7 @@ Example JSON output:
 
 ## `purchase-draft preview`
 
-Revalidate a saved bill draft and calculate its exact current total without saving or posting. The captured revision history stays unchanged. Use create --dry-run to preview a bill before saving.
+Revalidate a saved purchase draft and calculate its exact current total without saving or posting. The captured revision history stays unchanged. Use create --dry-run to preview a bill before saving.
 
 | Contract | Value |
 |---|---|
@@ -1386,7 +1612,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `request_version` | integer \| null | no | yes | null | — |
 | `id` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
-| `kind` | literal["bill"] | yes | no | — | — |
+| `kind` | literal["bill", "purchase_order"] | yes | no | — | — |
 | `operation` | literal["create", "correct", "restore"] | yes | no | — | — |
 | `original_id` | string \| null | no | yes | null | — |
 | `original_version` | integer \| null | no | yes | null | — |
@@ -1403,6 +1629,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
 | `payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
+| `payload.lines` | array[object] \| null | no | yes | null | — |
+| `payload.lines[].line_id` | string \| null | no | yes | null | — |
+| `payload.lines[].item` | string \| null | no | yes | null | — |
+| `payload.lines[].account` | string \| null | no | yes | null | — |
+| `payload.lines[].description` | string \| null | no | yes | null | — |
+| `payload.lines[].quantity` | string \| null | no | yes | null | — |
+| `payload.lines[].rate` | string \| object \| null | no | yes | null | — |
+| `payload.lines[].amount` | string \| object \| null | no | yes | null | — |
+| `payload.lines[].customer` | string \| null | no | yes | null | — |
+| `payload.lines[].billable` | boolean | no | no | false | — |
+| `payload.lines[].class_id` | string \| null | no | yes | null | — |
+| `payload.lines[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `payload.lines[].site` | string \| null | no | yes | null | Inventory site an item line is to arrive at, by id or name; omitted, the order's site, else the default site. |
+| `payload.expected_date` | string \| null | no | yes | null | — |
+| `payload.ship_to` | string \| null | no | yes | null | — |
+| `payload.reference` | string \| null | no | yes | null | — |
+| `payload.status` | literal["open", "partly_received", "closed"] \| null | no | yes | null | — |
 | `payload.date` | string | yes | no | — | — |
 | `payload.vendor` | string \| null | no | yes | null | — |
 | `payload.expenses` | array[object] \| null | no | yes | null | — |
@@ -1447,7 +1690,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.total.amount` | string | yes | no | — | — |
 | `preview.total.currency` | string | yes | no | — | — |
 | `preview.total.minor_units` | integer | yes | no | — | — |
-| `preview.expenses` | array[object] | yes | no | — | — |
+| `preview.expenses` | array[object] | no | no | [] | — |
 | `preview.expenses[].account` | object | yes | no | — | — |
 | `preview.expenses[].account.id` | string | yes | no | — | — |
 | `preview.expenses[].account.name` | string | yes | no | — | — |
@@ -1463,6 +1706,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `preview.expenses[].billable` | boolean | yes | no | — | — |
+| `preview.lines` | array[object] | no | no | [] | — |
+| `preview.lines[].item` | object \| null | no | yes | null | — |
+| `preview.lines[].item.id` | string | yes | no | — | — |
+| `preview.lines[].item.name` | string | yes | no | — | — |
+| `preview.lines[].account` | object \| null | no | yes | null | — |
+| `preview.lines[].account.id` | string | yes | no | — | — |
+| `preview.lines[].account.name` | string | yes | no | — | — |
+| `preview.lines[].description` | string \| null | no | yes | null | — |
+| `preview.lines[].quantity` | string \| null | no | yes | null | — |
+| `preview.lines[].rate` | object \| null | no | yes | null | — |
+| `preview.lines[].rate.amount` | string | yes | no | — | — |
+| `preview.lines[].rate.currency` | string | yes | no | — | — |
+| `preview.lines[].rate.minor_units` | integer | yes | no | — | — |
+| `preview.lines[].amount` | object | yes | no | — | — |
+| `preview.lines[].amount.amount` | string | yes | no | — | — |
+| `preview.lines[].amount.currency` | string | yes | no | — | — |
+| `preview.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `preview.items` | array[object] | no | no | [] | — |
 | `preview.items[].item` | object | yes | no | — | — |
 | `preview.items[].item.id` | string | yes | no | — | — |
@@ -1487,10 +1747,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.vendor` | object | yes | no | — | — |
 | `preview.vendor.id` | string | yes | no | — | — |
 | `preview.vendor.name` | string | yes | no | — | — |
-| `preview.ap_account` | object | yes | no | — | — |
+| `preview.ap_account` | object \| null | no | yes | null | — |
 | `preview.ap_account.id` | string | yes | no | — | — |
 | `preview.ap_account.name` | string | yes | no | — | — |
-| `preview.due_date` | string | yes | no | — | — |
+| `preview.due_date` | string \| null | no | yes | null | — |
 | `preview.currency` | string | yes | no | — | — |
 | `preview.accounting_effect` | literal["none"] | no | no | "none" | — |
 | `created_at` | string | yes | no | — | — |
@@ -1512,6 +1772,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `history[].payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
 | `history[].payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
+| `history[].payload.lines` | array[object] \| null | no | yes | null | — |
+| `history[].payload.lines[].line_id` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].item` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].account` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].description` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].quantity` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].rate` | string \| object \| null | no | yes | null | — |
+| `history[].payload.lines[].amount` | string \| object \| null | no | yes | null | — |
+| `history[].payload.lines[].customer` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].billable` | boolean | no | no | false | — |
+| `history[].payload.lines[].class_id` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `history[].payload.lines[].site` | string \| null | no | yes | null | Inventory site an item line is to arrive at, by id or name; omitted, the order's site, else the default site. |
+| `history[].payload.expected_date` | string \| null | no | yes | null | — |
+| `history[].payload.ship_to` | string \| null | no | yes | null | — |
+| `history[].payload.reference` | string \| null | no | yes | null | — |
+| `history[].payload.status` | literal["open", "partly_received", "closed"] \| null | no | yes | null | — |
 | `history[].payload.date` | string | yes | no | — | — |
 | `history[].payload.vendor` | string \| null | no | yes | null | — |
 | `history[].payload.expenses` | array[object] \| null | no | yes | null | — |
@@ -1556,7 +1833,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.total.amount` | string | yes | no | — | — |
 | `history[].preview.total.currency` | string | yes | no | — | — |
 | `history[].preview.total.minor_units` | integer | yes | no | — | — |
-| `history[].preview.expenses` | array[object] | yes | no | — | — |
+| `history[].preview.expenses` | array[object] | no | no | [] | — |
 | `history[].preview.expenses[].account` | object | yes | no | — | — |
 | `history[].preview.expenses[].account.id` | string | yes | no | — | — |
 | `history[].preview.expenses[].account.name` | string | yes | no | — | — |
@@ -1572,6 +1849,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `history[].preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `history[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `history[].preview.lines` | array[object] | no | no | [] | — |
+| `history[].preview.lines[].item` | object \| null | no | yes | null | — |
+| `history[].preview.lines[].item.id` | string | yes | no | — | — |
+| `history[].preview.lines[].item.name` | string | yes | no | — | — |
+| `history[].preview.lines[].account` | object \| null | no | yes | null | — |
+| `history[].preview.lines[].account.id` | string | yes | no | — | — |
+| `history[].preview.lines[].account.name` | string | yes | no | — | — |
+| `history[].preview.lines[].description` | string \| null | no | yes | null | — |
+| `history[].preview.lines[].quantity` | string \| null | no | yes | null | — |
+| `history[].preview.lines[].rate` | object \| null | no | yes | null | — |
+| `history[].preview.lines[].rate.amount` | string | yes | no | — | — |
+| `history[].preview.lines[].rate.currency` | string | yes | no | — | — |
+| `history[].preview.lines[].rate.minor_units` | integer | yes | no | — | — |
+| `history[].preview.lines[].amount` | object | yes | no | — | — |
+| `history[].preview.lines[].amount.amount` | string | yes | no | — | — |
+| `history[].preview.lines[].amount.currency` | string | yes | no | — | — |
+| `history[].preview.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `history[].preview.items` | array[object] | no | no | [] | — |
 | `history[].preview.items[].item` | object | yes | no | — | — |
 | `history[].preview.items[].item.id` | string | yes | no | — | — |
@@ -1596,10 +1890,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.vendor` | object | yes | no | — | — |
 | `history[].preview.vendor.id` | string | yes | no | — | — |
 | `history[].preview.vendor.name` | string | yes | no | — | — |
-| `history[].preview.ap_account` | object | yes | no | — | — |
+| `history[].preview.ap_account` | object \| null | no | yes | null | — |
 | `history[].preview.ap_account.id` | string | yes | no | — | — |
 | `history[].preview.ap_account.name` | string | yes | no | — | — |
-| `history[].preview.due_date` | string | yes | no | — | — |
+| `history[].preview.due_date` | string \| null | no | yes | null | — |
 | `history[].preview.currency` | string | yes | no | — | — |
 | `history[].preview.accounting_effect` | literal["none"] | no | no | "none" | — |
 | `history[].actor` | string | yes | no | — | — |
@@ -1628,28 +1922,31 @@ Example JSON output:
     "custom_fields": {},
     "date": "2026-01-01",
     "due_date": null,
+    "expected_date": null,
     "expenses": null,
     "items": null,
+    "lines": null,
     "memo": null,
     "number": null,
     "order_lines": null,
     "purchase_order": null,
     "receipts": null,
+    "reference": null,
+    "ship_to": null,
     "site": null,
+    "status": null,
     "supplier_reference": null,
     "terms": null,
     "vendor": null
   },
   "preview": {
     "accounting_effect": "none",
-    "ap_account": {
-      "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-      "name": "value"
-    },
+    "ap_account": null,
     "currency": "USD",
-    "due_date": "2026-01-01",
+    "due_date": null,
     "expenses": [],
     "items": [],
+    "lines": [],
     "purchase_order": null,
     "receipts": [],
     "total": {
@@ -1704,7 +2001,7 @@ Example JSON output:
 
 ## `purchase-draft show`
 
-Show the saved bill draft, exact captured preview and immutable revision history, including cancelled drafts.
+Show the saved purchase draft, exact captured preview and immutable revision history, including cancelled drafts.
 
 | Contract | Value |
 |---|---|
@@ -1766,7 +2063,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `request_version` | integer \| null | no | yes | null | — |
 | `id` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
-| `kind` | literal["bill"] | yes | no | — | — |
+| `kind` | literal["bill", "purchase_order"] | yes | no | — | — |
 | `operation` | literal["create", "correct", "restore"] | yes | no | — | — |
 | `original_id` | string \| null | no | yes | null | — |
 | `original_version` | integer \| null | no | yes | null | — |
@@ -1783,6 +2080,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
 | `payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
+| `payload.lines` | array[object] \| null | no | yes | null | — |
+| `payload.lines[].line_id` | string \| null | no | yes | null | — |
+| `payload.lines[].item` | string \| null | no | yes | null | — |
+| `payload.lines[].account` | string \| null | no | yes | null | — |
+| `payload.lines[].description` | string \| null | no | yes | null | — |
+| `payload.lines[].quantity` | string \| null | no | yes | null | — |
+| `payload.lines[].rate` | string \| object \| null | no | yes | null | — |
+| `payload.lines[].amount` | string \| object \| null | no | yes | null | — |
+| `payload.lines[].customer` | string \| null | no | yes | null | — |
+| `payload.lines[].billable` | boolean | no | no | false | — |
+| `payload.lines[].class_id` | string \| null | no | yes | null | — |
+| `payload.lines[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `payload.lines[].site` | string \| null | no | yes | null | Inventory site an item line is to arrive at, by id or name; omitted, the order's site, else the default site. |
+| `payload.expected_date` | string \| null | no | yes | null | — |
+| `payload.ship_to` | string \| null | no | yes | null | — |
+| `payload.reference` | string \| null | no | yes | null | — |
+| `payload.status` | literal["open", "partly_received", "closed"] \| null | no | yes | null | — |
 | `payload.date` | string | yes | no | — | — |
 | `payload.vendor` | string \| null | no | yes | null | — |
 | `payload.expenses` | array[object] \| null | no | yes | null | — |
@@ -1827,7 +2141,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.total.amount` | string | yes | no | — | — |
 | `preview.total.currency` | string | yes | no | — | — |
 | `preview.total.minor_units` | integer | yes | no | — | — |
-| `preview.expenses` | array[object] | yes | no | — | — |
+| `preview.expenses` | array[object] | no | no | [] | — |
 | `preview.expenses[].account` | object | yes | no | — | — |
 | `preview.expenses[].account.id` | string | yes | no | — | — |
 | `preview.expenses[].account.name` | string | yes | no | — | — |
@@ -1843,6 +2157,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `preview.expenses[].billable` | boolean | yes | no | — | — |
+| `preview.lines` | array[object] | no | no | [] | — |
+| `preview.lines[].item` | object \| null | no | yes | null | — |
+| `preview.lines[].item.id` | string | yes | no | — | — |
+| `preview.lines[].item.name` | string | yes | no | — | — |
+| `preview.lines[].account` | object \| null | no | yes | null | — |
+| `preview.lines[].account.id` | string | yes | no | — | — |
+| `preview.lines[].account.name` | string | yes | no | — | — |
+| `preview.lines[].description` | string \| null | no | yes | null | — |
+| `preview.lines[].quantity` | string \| null | no | yes | null | — |
+| `preview.lines[].rate` | object \| null | no | yes | null | — |
+| `preview.lines[].rate.amount` | string | yes | no | — | — |
+| `preview.lines[].rate.currency` | string | yes | no | — | — |
+| `preview.lines[].rate.minor_units` | integer | yes | no | — | — |
+| `preview.lines[].amount` | object | yes | no | — | — |
+| `preview.lines[].amount.amount` | string | yes | no | — | — |
+| `preview.lines[].amount.currency` | string | yes | no | — | — |
+| `preview.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `preview.items` | array[object] | no | no | [] | — |
 | `preview.items[].item` | object | yes | no | — | — |
 | `preview.items[].item.id` | string | yes | no | — | — |
@@ -1867,10 +2198,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.vendor` | object | yes | no | — | — |
 | `preview.vendor.id` | string | yes | no | — | — |
 | `preview.vendor.name` | string | yes | no | — | — |
-| `preview.ap_account` | object | yes | no | — | — |
+| `preview.ap_account` | object \| null | no | yes | null | — |
 | `preview.ap_account.id` | string | yes | no | — | — |
 | `preview.ap_account.name` | string | yes | no | — | — |
-| `preview.due_date` | string | yes | no | — | — |
+| `preview.due_date` | string \| null | no | yes | null | — |
 | `preview.currency` | string | yes | no | — | — |
 | `preview.accounting_effect` | literal["none"] | no | no | "none" | — |
 | `created_at` | string | yes | no | — | — |
@@ -1892,6 +2223,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `history[].payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
 | `history[].payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
+| `history[].payload.lines` | array[object] \| null | no | yes | null | — |
+| `history[].payload.lines[].line_id` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].item` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].account` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].description` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].quantity` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].rate` | string \| object \| null | no | yes | null | — |
+| `history[].payload.lines[].amount` | string \| object \| null | no | yes | null | — |
+| `history[].payload.lines[].customer` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].billable` | boolean | no | no | false | — |
+| `history[].payload.lines[].class_id` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `history[].payload.lines[].site` | string \| null | no | yes | null | Inventory site an item line is to arrive at, by id or name; omitted, the order's site, else the default site. |
+| `history[].payload.expected_date` | string \| null | no | yes | null | — |
+| `history[].payload.ship_to` | string \| null | no | yes | null | — |
+| `history[].payload.reference` | string \| null | no | yes | null | — |
+| `history[].payload.status` | literal["open", "partly_received", "closed"] \| null | no | yes | null | — |
 | `history[].payload.date` | string | yes | no | — | — |
 | `history[].payload.vendor` | string \| null | no | yes | null | — |
 | `history[].payload.expenses` | array[object] \| null | no | yes | null | — |
@@ -1936,7 +2284,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.total.amount` | string | yes | no | — | — |
 | `history[].preview.total.currency` | string | yes | no | — | — |
 | `history[].preview.total.minor_units` | integer | yes | no | — | — |
-| `history[].preview.expenses` | array[object] | yes | no | — | — |
+| `history[].preview.expenses` | array[object] | no | no | [] | — |
 | `history[].preview.expenses[].account` | object | yes | no | — | — |
 | `history[].preview.expenses[].account.id` | string | yes | no | — | — |
 | `history[].preview.expenses[].account.name` | string | yes | no | — | — |
@@ -1952,6 +2300,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `history[].preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `history[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `history[].preview.lines` | array[object] | no | no | [] | — |
+| `history[].preview.lines[].item` | object \| null | no | yes | null | — |
+| `history[].preview.lines[].item.id` | string | yes | no | — | — |
+| `history[].preview.lines[].item.name` | string | yes | no | — | — |
+| `history[].preview.lines[].account` | object \| null | no | yes | null | — |
+| `history[].preview.lines[].account.id` | string | yes | no | — | — |
+| `history[].preview.lines[].account.name` | string | yes | no | — | — |
+| `history[].preview.lines[].description` | string \| null | no | yes | null | — |
+| `history[].preview.lines[].quantity` | string \| null | no | yes | null | — |
+| `history[].preview.lines[].rate` | object \| null | no | yes | null | — |
+| `history[].preview.lines[].rate.amount` | string | yes | no | — | — |
+| `history[].preview.lines[].rate.currency` | string | yes | no | — | — |
+| `history[].preview.lines[].rate.minor_units` | integer | yes | no | — | — |
+| `history[].preview.lines[].amount` | object | yes | no | — | — |
+| `history[].preview.lines[].amount.amount` | string | yes | no | — | — |
+| `history[].preview.lines[].amount.currency` | string | yes | no | — | — |
+| `history[].preview.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `history[].preview.items` | array[object] | no | no | [] | — |
 | `history[].preview.items[].item` | object | yes | no | — | — |
 | `history[].preview.items[].item.id` | string | yes | no | — | — |
@@ -1976,10 +2341,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.vendor` | object | yes | no | — | — |
 | `history[].preview.vendor.id` | string | yes | no | — | — |
 | `history[].preview.vendor.name` | string | yes | no | — | — |
-| `history[].preview.ap_account` | object | yes | no | — | — |
+| `history[].preview.ap_account` | object \| null | no | yes | null | — |
 | `history[].preview.ap_account.id` | string | yes | no | — | — |
 | `history[].preview.ap_account.name` | string | yes | no | — | — |
-| `history[].preview.due_date` | string | yes | no | — | — |
+| `history[].preview.due_date` | string \| null | no | yes | null | — |
 | `history[].preview.currency` | string | yes | no | — | — |
 | `history[].preview.accounting_effect` | literal["none"] | no | no | "none" | — |
 | `history[].actor` | string | yes | no | — | — |
@@ -2008,28 +2373,31 @@ Example JSON output:
     "custom_fields": {},
     "date": "2026-01-01",
     "due_date": null,
+    "expected_date": null,
     "expenses": null,
     "items": null,
+    "lines": null,
     "memo": null,
     "number": null,
     "order_lines": null,
     "purchase_order": null,
     "receipts": null,
+    "reference": null,
+    "ship_to": null,
     "site": null,
+    "status": null,
     "supplier_reference": null,
     "terms": null,
     "vendor": null
   },
   "preview": {
     "accounting_effect": "none",
-    "ap_account": {
-      "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-      "name": "value"
-    },
+    "ap_account": null,
     "currency": "USD",
-    "due_date": "2026-01-01",
+    "due_date": null,
     "expenses": [],
     "items": [],
+    "lines": [],
     "purchase_order": null,
     "receipts": [],
     "total": {
@@ -2084,7 +2452,7 @@ Example JSON output:
 
 ## `purchase-draft submit`
 
-Submit the exact saved bill revision to the published one-step Review policy. Freezes commercial and source facts; posts nothing. Use operation_key and reason.
+Submit the exact saved purchase revision to the published one-step Review policy. Freezes commercial and source facts; posts nothing. Use operation_key and reason.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -2224,7 +2592,7 @@ Example JSON output:
 
 ## `purchase-draft update`
 
-Replace all commercial fields of a saved bill draft, carrying its exact expected_version, a new operation_key and reason. Omitted optional fields reset to defaults. Prior revisions remain readable; a cancelled draft refuses.
+Replace all commercial fields of a saved purchase draft, carrying its exact expected_version, a new operation_key and reason. Omitted optional fields reset to defaults. Prior revisions remain readable; a cancelled draft refuses.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -2266,6 +2634,22 @@ The same example as complete `bookflow_run` arguments:
 | `count_position` | `--count-position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `custom_fields` | `--custom-fields` | object[string, any \| null] | no | no | {} | — |
 | `custom_field_kinds` | `--custom-field-kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
+| `lines[].line_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
+| `lines[].item` | inside `--lines` JSON array | string \| null | no | yes | null | — |
+| `lines[].account` | inside `--lines` JSON array | string \| null | no | yes | null | — |
+| `lines[].description` | inside `--lines` JSON array | string \| null | no | yes | null | — |
+| `lines[].quantity` | inside `--lines` JSON array | string \| null | no | yes | null | — |
+| `lines[].rate` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
+| `lines[].amount` | inside `--lines` JSON array | string \| object \| null | no | yes | null | — |
+| `lines[].customer` | inside `--lines` JSON array | string \| null | no | yes | null | — |
+| `lines[].billable` | inside `--lines` JSON array | boolean | no | no | false | — |
+| `lines[].class_id` | inside `--lines` JSON array | string \| null | no | yes | null | — |
+| `lines[].class_mode` | inside `--lines` JSON array | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `lines[].site` | inside `--lines` JSON array | string \| null | no | yes | null | Inventory site an item line is to arrive at, by id or name; omitted, the order's site, else the default site. |
+| `expected_date` | `--expected-date` | string \| null | no | yes | null | — |
+| `ship_to` | `--ship-to` | string \| null | no | yes | null | — |
+| `reference` | `--reference` | string \| null | no | yes | null | — |
+| `status` | `--status` | literal["open", "partly_received", "closed"] \| null | no | yes | null | — |
 | `date` | `--date` | string | yes | no | — | minimum length 10; maximum length 10; pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" |
 | `vendor` | `--vendor` | string \| null | no | yes | null | — |
 | `expenses[].line_id` | inside `--expenses` JSON array | string \| null | no | yes | null | — |
@@ -2301,7 +2685,7 @@ The same example as complete `bookflow_run` arguments:
 | `receipts[].quantity` | inside `--receipts` JSON array | string | yes | no | — | — |
 | `receipts[].unit_cost` | inside `--receipts` JSON array | string \| object \| null | no | yes | null | Product unit cost only, excluding retained receipt shipping. |
 | `receipts[].amount` | inside `--receipts` JSON array | string \| object \| null | no | yes | null | Product amount only, excluding retained receipt shipping. Omit both price inputs to retain original product value. |
-| `kind` | `--kind` | literal["bill"] | no | no | "bill" | — |
+| `kind` | `--kind` | literal["bill", "purchase_order"] | no | no | "bill" | — |
 | `operation` | `--operation` | literal["create", "correct", "restore"] | no | no | "create" | — |
 | `original_id` | `--original-id` | string \| null | no | yes | null | — |
 | `original_version` | `--original-version` | integer \| null | no | yes | null | — |
@@ -2350,7 +2734,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `request_version` | integer \| null | no | yes | null | — |
 | `id` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
-| `kind` | literal["bill"] | yes | no | — | — |
+| `kind` | literal["bill", "purchase_order"] | yes | no | — | — |
 | `operation` | literal["create", "correct", "restore"] | yes | no | — | — |
 | `original_id` | string \| null | no | yes | null | — |
 | `original_version` | integer \| null | no | yes | null | — |
@@ -2367,6 +2751,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
 | `payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
+| `payload.lines` | array[object] \| null | no | yes | null | — |
+| `payload.lines[].line_id` | string \| null | no | yes | null | — |
+| `payload.lines[].item` | string \| null | no | yes | null | — |
+| `payload.lines[].account` | string \| null | no | yes | null | — |
+| `payload.lines[].description` | string \| null | no | yes | null | — |
+| `payload.lines[].quantity` | string \| null | no | yes | null | — |
+| `payload.lines[].rate` | string \| object \| null | no | yes | null | — |
+| `payload.lines[].amount` | string \| object \| null | no | yes | null | — |
+| `payload.lines[].customer` | string \| null | no | yes | null | — |
+| `payload.lines[].billable` | boolean | no | no | false | — |
+| `payload.lines[].class_id` | string \| null | no | yes | null | — |
+| `payload.lines[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `payload.lines[].site` | string \| null | no | yes | null | Inventory site an item line is to arrive at, by id or name; omitted, the order's site, else the default site. |
+| `payload.expected_date` | string \| null | no | yes | null | — |
+| `payload.ship_to` | string \| null | no | yes | null | — |
+| `payload.reference` | string \| null | no | yes | null | — |
+| `payload.status` | literal["open", "partly_received", "closed"] \| null | no | yes | null | — |
 | `payload.date` | string | yes | no | — | — |
 | `payload.vendor` | string \| null | no | yes | null | — |
 | `payload.expenses` | array[object] \| null | no | yes | null | — |
@@ -2411,7 +2812,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.total.amount` | string | yes | no | — | — |
 | `preview.total.currency` | string | yes | no | — | — |
 | `preview.total.minor_units` | integer | yes | no | — | — |
-| `preview.expenses` | array[object] | yes | no | — | — |
+| `preview.expenses` | array[object] | no | no | [] | — |
 | `preview.expenses[].account` | object | yes | no | — | — |
 | `preview.expenses[].account.id` | string | yes | no | — | — |
 | `preview.expenses[].account.name` | string | yes | no | — | — |
@@ -2427,6 +2828,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `preview.expenses[].billable` | boolean | yes | no | — | — |
+| `preview.lines` | array[object] | no | no | [] | — |
+| `preview.lines[].item` | object \| null | no | yes | null | — |
+| `preview.lines[].item.id` | string | yes | no | — | — |
+| `preview.lines[].item.name` | string | yes | no | — | — |
+| `preview.lines[].account` | object \| null | no | yes | null | — |
+| `preview.lines[].account.id` | string | yes | no | — | — |
+| `preview.lines[].account.name` | string | yes | no | — | — |
+| `preview.lines[].description` | string \| null | no | yes | null | — |
+| `preview.lines[].quantity` | string \| null | no | yes | null | — |
+| `preview.lines[].rate` | object \| null | no | yes | null | — |
+| `preview.lines[].rate.amount` | string | yes | no | — | — |
+| `preview.lines[].rate.currency` | string | yes | no | — | — |
+| `preview.lines[].rate.minor_units` | integer | yes | no | — | — |
+| `preview.lines[].amount` | object | yes | no | — | — |
+| `preview.lines[].amount.amount` | string | yes | no | — | — |
+| `preview.lines[].amount.currency` | string | yes | no | — | — |
+| `preview.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `preview.items` | array[object] | no | no | [] | — |
 | `preview.items[].item` | object | yes | no | — | — |
 | `preview.items[].item.id` | string | yes | no | — | — |
@@ -2451,10 +2869,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.vendor` | object | yes | no | — | — |
 | `preview.vendor.id` | string | yes | no | — | — |
 | `preview.vendor.name` | string | yes | no | — | — |
-| `preview.ap_account` | object | yes | no | — | — |
+| `preview.ap_account` | object \| null | no | yes | null | — |
 | `preview.ap_account.id` | string | yes | no | — | — |
 | `preview.ap_account.name` | string | yes | no | — | — |
-| `preview.due_date` | string | yes | no | — | — |
+| `preview.due_date` | string \| null | no | yes | null | — |
 | `preview.currency` | string | yes | no | — | — |
 | `preview.accounting_effect` | literal["none"] | no | no | "none" | — |
 | `created_at` | string | yes | no | — | — |
@@ -2476,6 +2894,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `history[].payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
 | `history[].payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
+| `history[].payload.lines` | array[object] \| null | no | yes | null | — |
+| `history[].payload.lines[].line_id` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].item` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].account` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].description` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].quantity` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].rate` | string \| object \| null | no | yes | null | — |
+| `history[].payload.lines[].amount` | string \| object \| null | no | yes | null | — |
+| `history[].payload.lines[].customer` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].billable` | boolean | no | no | false | — |
+| `history[].payload.lines[].class_id` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `history[].payload.lines[].site` | string \| null | no | yes | null | Inventory site an item line is to arrive at, by id or name; omitted, the order's site, else the default site. |
+| `history[].payload.expected_date` | string \| null | no | yes | null | — |
+| `history[].payload.ship_to` | string \| null | no | yes | null | — |
+| `history[].payload.reference` | string \| null | no | yes | null | — |
+| `history[].payload.status` | literal["open", "partly_received", "closed"] \| null | no | yes | null | — |
 | `history[].payload.date` | string | yes | no | — | — |
 | `history[].payload.vendor` | string \| null | no | yes | null | — |
 | `history[].payload.expenses` | array[object] \| null | no | yes | null | — |
@@ -2520,7 +2955,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.total.amount` | string | yes | no | — | — |
 | `history[].preview.total.currency` | string | yes | no | — | — |
 | `history[].preview.total.minor_units` | integer | yes | no | — | — |
-| `history[].preview.expenses` | array[object] | yes | no | — | — |
+| `history[].preview.expenses` | array[object] | no | no | [] | — |
 | `history[].preview.expenses[].account` | object | yes | no | — | — |
 | `history[].preview.expenses[].account.id` | string | yes | no | — | — |
 | `history[].preview.expenses[].account.name` | string | yes | no | — | — |
@@ -2536,6 +2971,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `history[].preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `history[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `history[].preview.lines` | array[object] | no | no | [] | — |
+| `history[].preview.lines[].item` | object \| null | no | yes | null | — |
+| `history[].preview.lines[].item.id` | string | yes | no | — | — |
+| `history[].preview.lines[].item.name` | string | yes | no | — | — |
+| `history[].preview.lines[].account` | object \| null | no | yes | null | — |
+| `history[].preview.lines[].account.id` | string | yes | no | — | — |
+| `history[].preview.lines[].account.name` | string | yes | no | — | — |
+| `history[].preview.lines[].description` | string \| null | no | yes | null | — |
+| `history[].preview.lines[].quantity` | string \| null | no | yes | null | — |
+| `history[].preview.lines[].rate` | object \| null | no | yes | null | — |
+| `history[].preview.lines[].rate.amount` | string | yes | no | — | — |
+| `history[].preview.lines[].rate.currency` | string | yes | no | — | — |
+| `history[].preview.lines[].rate.minor_units` | integer | yes | no | — | — |
+| `history[].preview.lines[].amount` | object | yes | no | — | — |
+| `history[].preview.lines[].amount.amount` | string | yes | no | — | — |
+| `history[].preview.lines[].amount.currency` | string | yes | no | — | — |
+| `history[].preview.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `history[].preview.items` | array[object] | no | no | [] | — |
 | `history[].preview.items[].item` | object | yes | no | — | — |
 | `history[].preview.items[].item.id` | string | yes | no | — | — |
@@ -2560,10 +3012,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.vendor` | object | yes | no | — | — |
 | `history[].preview.vendor.id` | string | yes | no | — | — |
 | `history[].preview.vendor.name` | string | yes | no | — | — |
-| `history[].preview.ap_account` | object | yes | no | — | — |
+| `history[].preview.ap_account` | object \| null | no | yes | null | — |
 | `history[].preview.ap_account.id` | string | yes | no | — | — |
 | `history[].preview.ap_account.name` | string | yes | no | — | — |
-| `history[].preview.due_date` | string | yes | no | — | — |
+| `history[].preview.due_date` | string \| null | no | yes | null | — |
 | `history[].preview.currency` | string | yes | no | — | — |
 | `history[].preview.accounting_effect` | literal["none"] | no | no | "none" | — |
 | `history[].actor` | string | yes | no | — | — |
@@ -2592,28 +3044,31 @@ Example JSON output:
     "custom_fields": {},
     "date": "2026-01-01",
     "due_date": null,
+    "expected_date": null,
     "expenses": null,
     "items": null,
+    "lines": null,
     "memo": null,
     "number": null,
     "order_lines": null,
     "purchase_order": null,
     "receipts": null,
+    "reference": null,
+    "ship_to": null,
     "site": null,
+    "status": null,
     "supplier_reference": null,
     "terms": null,
     "vendor": null
   },
   "preview": {
     "accounting_effect": "none",
-    "ap_account": {
-      "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-      "name": "value"
-    },
+    "ap_account": null,
     "currency": "USD",
-    "due_date": "2026-01-01",
+    "due_date": null,
     "expenses": [],
     "items": [],
+    "lines": [],
     "purchase_order": null,
     "receipts": [],
     "total": {
@@ -2753,7 +3208,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `request_version` | integer \| null | no | yes | null | — |
 | `id` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
-| `kind` | literal["bill"] | yes | no | — | — |
+| `kind` | literal["bill", "purchase_order"] | yes | no | — | — |
 | `operation` | literal["create", "correct", "restore"] | yes | no | — | — |
 | `original_id` | string \| null | no | yes | null | — |
 | `original_version` | integer \| null | no | yes | null | — |
@@ -2770,6 +3225,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
 | `payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
+| `payload.lines` | array[object] \| null | no | yes | null | — |
+| `payload.lines[].line_id` | string \| null | no | yes | null | — |
+| `payload.lines[].item` | string \| null | no | yes | null | — |
+| `payload.lines[].account` | string \| null | no | yes | null | — |
+| `payload.lines[].description` | string \| null | no | yes | null | — |
+| `payload.lines[].quantity` | string \| null | no | yes | null | — |
+| `payload.lines[].rate` | string \| object \| null | no | yes | null | — |
+| `payload.lines[].amount` | string \| object \| null | no | yes | null | — |
+| `payload.lines[].customer` | string \| null | no | yes | null | — |
+| `payload.lines[].billable` | boolean | no | no | false | — |
+| `payload.lines[].class_id` | string \| null | no | yes | null | — |
+| `payload.lines[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `payload.lines[].site` | string \| null | no | yes | null | Inventory site an item line is to arrive at, by id or name; omitted, the order's site, else the default site. |
+| `payload.expected_date` | string \| null | no | yes | null | — |
+| `payload.ship_to` | string \| null | no | yes | null | — |
+| `payload.reference` | string \| null | no | yes | null | — |
+| `payload.status` | literal["open", "partly_received", "closed"] \| null | no | yes | null | — |
 | `payload.date` | string | yes | no | — | — |
 | `payload.vendor` | string \| null | no | yes | null | — |
 | `payload.expenses` | array[object] \| null | no | yes | null | — |
@@ -2814,7 +3286,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.total.amount` | string | yes | no | — | — |
 | `preview.total.currency` | string | yes | no | — | — |
 | `preview.total.minor_units` | integer | yes | no | — | — |
-| `preview.expenses` | array[object] | yes | no | — | — |
+| `preview.expenses` | array[object] | no | no | [] | — |
 | `preview.expenses[].account` | object | yes | no | — | — |
 | `preview.expenses[].account.id` | string | yes | no | — | — |
 | `preview.expenses[].account.name` | string | yes | no | — | — |
@@ -2830,6 +3302,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `preview.expenses[].billable` | boolean | yes | no | — | — |
+| `preview.lines` | array[object] | no | no | [] | — |
+| `preview.lines[].item` | object \| null | no | yes | null | — |
+| `preview.lines[].item.id` | string | yes | no | — | — |
+| `preview.lines[].item.name` | string | yes | no | — | — |
+| `preview.lines[].account` | object \| null | no | yes | null | — |
+| `preview.lines[].account.id` | string | yes | no | — | — |
+| `preview.lines[].account.name` | string | yes | no | — | — |
+| `preview.lines[].description` | string \| null | no | yes | null | — |
+| `preview.lines[].quantity` | string \| null | no | yes | null | — |
+| `preview.lines[].rate` | object \| null | no | yes | null | — |
+| `preview.lines[].rate.amount` | string | yes | no | — | — |
+| `preview.lines[].rate.currency` | string | yes | no | — | — |
+| `preview.lines[].rate.minor_units` | integer | yes | no | — | — |
+| `preview.lines[].amount` | object | yes | no | — | — |
+| `preview.lines[].amount.amount` | string | yes | no | — | — |
+| `preview.lines[].amount.currency` | string | yes | no | — | — |
+| `preview.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `preview.items` | array[object] | no | no | [] | — |
 | `preview.items[].item` | object | yes | no | — | — |
 | `preview.items[].item.id` | string | yes | no | — | — |
@@ -2854,10 +3343,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `preview.vendor` | object | yes | no | — | — |
 | `preview.vendor.id` | string | yes | no | — | — |
 | `preview.vendor.name` | string | yes | no | — | — |
-| `preview.ap_account` | object | yes | no | — | — |
+| `preview.ap_account` | object \| null | no | yes | null | — |
 | `preview.ap_account.id` | string | yes | no | — | — |
 | `preview.ap_account.name` | string | yes | no | — | — |
-| `preview.due_date` | string | yes | no | — | — |
+| `preview.due_date` | string \| null | no | yes | null | — |
 | `preview.currency` | string | yes | no | — | — |
 | `preview.accounting_effect` | literal["none"] | no | no | "none" | — |
 | `created_at` | string | yes | no | — | — |
@@ -2879,6 +3368,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].payload.count_position` | literal["before", "after"] \| null | no | yes | null | Before (the default) or after a physical count of its site on the same date: a document that happened after the count says after. |
 | `history[].payload.custom_fields` | object[string, any \| null] | no | no | {} | — |
 | `history[].payload.custom_field_kinds` | object[string, literal["text", "number", "date", "bool", "choice"]] | no | no | {} | — |
+| `history[].payload.lines` | array[object] \| null | no | yes | null | — |
+| `history[].payload.lines[].line_id` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].item` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].account` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].description` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].quantity` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].rate` | string \| object \| null | no | yes | null | — |
+| `history[].payload.lines[].amount` | string \| object \| null | no | yes | null | — |
+| `history[].payload.lines[].customer` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].billable` | boolean | no | no | false | — |
+| `history[].payload.lines[].class_id` | string \| null | no | yes | null | — |
+| `history[].payload.lines[].class_mode` | literal["inherit", "none", "value"] | no | no | "inherit" | — |
+| `history[].payload.lines[].site` | string \| null | no | yes | null | Inventory site an item line is to arrive at, by id or name; omitted, the order's site, else the default site. |
+| `history[].payload.expected_date` | string \| null | no | yes | null | — |
+| `history[].payload.ship_to` | string \| null | no | yes | null | — |
+| `history[].payload.reference` | string \| null | no | yes | null | — |
+| `history[].payload.status` | literal["open", "partly_received", "closed"] \| null | no | yes | null | — |
 | `history[].payload.date` | string | yes | no | — | — |
 | `history[].payload.vendor` | string \| null | no | yes | null | — |
 | `history[].payload.expenses` | array[object] \| null | no | yes | null | — |
@@ -2923,7 +3429,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.total.amount` | string | yes | no | — | — |
 | `history[].preview.total.currency` | string | yes | no | — | — |
 | `history[].preview.total.minor_units` | integer | yes | no | — | — |
-| `history[].preview.expenses` | array[object] | yes | no | — | — |
+| `history[].preview.expenses` | array[object] | no | no | [] | — |
 | `history[].preview.expenses[].account` | object | yes | no | — | — |
 | `history[].preview.expenses[].account.id` | string | yes | no | — | — |
 | `history[].preview.expenses[].account.name` | string | yes | no | — | — |
@@ -2939,6 +3445,23 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.expenses[].class_id.id` | string | yes | no | — | — |
 | `history[].preview.expenses[].class_id.name` | string | yes | no | — | — |
 | `history[].preview.expenses[].billable` | boolean | yes | no | — | — |
+| `history[].preview.lines` | array[object] | no | no | [] | — |
+| `history[].preview.lines[].item` | object \| null | no | yes | null | — |
+| `history[].preview.lines[].item.id` | string | yes | no | — | — |
+| `history[].preview.lines[].item.name` | string | yes | no | — | — |
+| `history[].preview.lines[].account` | object \| null | no | yes | null | — |
+| `history[].preview.lines[].account.id` | string | yes | no | — | — |
+| `history[].preview.lines[].account.name` | string | yes | no | — | — |
+| `history[].preview.lines[].description` | string \| null | no | yes | null | — |
+| `history[].preview.lines[].quantity` | string \| null | no | yes | null | — |
+| `history[].preview.lines[].rate` | object \| null | no | yes | null | — |
+| `history[].preview.lines[].rate.amount` | string | yes | no | — | — |
+| `history[].preview.lines[].rate.currency` | string | yes | no | — | — |
+| `history[].preview.lines[].rate.minor_units` | integer | yes | no | — | — |
+| `history[].preview.lines[].amount` | object | yes | no | — | — |
+| `history[].preview.lines[].amount.amount` | string | yes | no | — | — |
+| `history[].preview.lines[].amount.currency` | string | yes | no | — | — |
+| `history[].preview.lines[].amount.minor_units` | integer | yes | no | — | — |
 | `history[].preview.items` | array[object] | no | no | [] | — |
 | `history[].preview.items[].item` | object | yes | no | — | — |
 | `history[].preview.items[].item.id` | string | yes | no | — | — |
@@ -2963,10 +3486,10 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `history[].preview.vendor` | object | yes | no | — | — |
 | `history[].preview.vendor.id` | string | yes | no | — | — |
 | `history[].preview.vendor.name` | string | yes | no | — | — |
-| `history[].preview.ap_account` | object | yes | no | — | — |
+| `history[].preview.ap_account` | object \| null | no | yes | null | — |
 | `history[].preview.ap_account.id` | string | yes | no | — | — |
 | `history[].preview.ap_account.name` | string | yes | no | — | — |
-| `history[].preview.due_date` | string | yes | no | — | — |
+| `history[].preview.due_date` | string \| null | no | yes | null | — |
 | `history[].preview.currency` | string | yes | no | — | — |
 | `history[].preview.accounting_effect` | literal["none"] | no | no | "none" | — |
 | `history[].actor` | string | yes | no | — | — |
@@ -2995,28 +3518,31 @@ Example JSON output:
     "custom_fields": {},
     "date": "2026-01-01",
     "due_date": null,
+    "expected_date": null,
     "expenses": null,
     "items": null,
+    "lines": null,
     "memo": null,
     "number": null,
     "order_lines": null,
     "purchase_order": null,
     "receipts": null,
+    "reference": null,
+    "ship_to": null,
     "site": null,
+    "status": null,
     "supplier_reference": null,
     "terms": null,
     "vendor": null
   },
   "preview": {
     "accounting_effect": "none",
-    "ap_account": {
-      "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-      "name": "value"
-    },
+    "ap_account": null,
     "currency": "USD",
-    "due_date": "2026-01-01",
+    "due_date": null,
     "expenses": [],
     "items": [],
+    "lines": [],
     "purchase_order": null,
     "receipts": [],
     "total": {

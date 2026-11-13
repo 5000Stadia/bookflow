@@ -4,33 +4,47 @@
 {% macro lines(p) %}
 {% for line in p.expenses %}<p>{{ line.account.name }} · {{ display_money(line.amount) }}{% if line.memo %} · {{ line.memo }}{% endif %}</p>{% endfor %}
 {% for line in p['items'] %}<p data-draft-item>{{ line.item.name }}{% if line.description %} · {{ line.description }}{% endif %} · Quantity {{ line.quantity }}{% if line.unit_cost %} · Unit cost {{ line.unit_cost.amount }}{% endif %} · Amount {{ display_money(line.amount) }}</p>{% endfor %}
+{% for line in p.lines %}<p data-draft-order-line>{{ line.item.name if line.item else line.account.name }}{% if line.description %} · {{ line.description }}{% endif %}{% if line.quantity %} · Quantity {{ line.quantity }}{% endif %}{% if line.rate %} · Rate {{ line.rate.amount }}{% endif %} · Amount {{ display_money(line.amount) }}</p>{% endfor %}
 {% if p.purchase_order %}<p>Purchase order {{ p.purchase_order.name }}</p>{% endif %}
 {% for source in p.receipts %}<p>Receipt {{ source.number }} · Quantity {{ source.quantity }}</p>{% endfor %}
 {% endmacro %}
+{% set noun = 'purchase order' if kind == 'purchase_order' else 'bill' %}
 {% set post = '/c/' ~ company_id ~ '/purchase-drafts' %}
 <section id="purchase-drafts" class="purchase-drafts" data-draft-id="{{ draft.id if draft else '' }}">
 <nav class="crumbs"><a href="/c/{{ company_id }}/_group/vendors">Vendors &amp; purchases</a> / <a href="{{ post }}">Purchase drafts</a></nav>
-<h1>{{ 'Edit bill draft' if editing and draft else 'New bill draft' if editing else 'Bill draft' if draft else 'Purchase drafts' }}</h1>
-<p>Saved drafts and approvals do not affect accounts payable, the ledger or stock. Commit posts the bill after current approval and posting checks.</p>
+<h1>{{ ('Edit ' ~ noun ~ ' draft') if editing and draft else ('New ' ~ noun ~ ' draft') if editing else (noun|capitalize ~ ' draft') if draft else 'Purchase drafts' }}</h1>
+<p>Saved drafts and approvals do not affect accounts payable, the ledger or stock. Commit releases a purchase order or posts a bill after current approval and native checks.</p>
 {% if error %}<div role="alert" class="error" data-draft-error><strong>{{ error.message or error.code }}</strong>{% for f in (error.details or {}).get('fields', []) %}<p>{{ f.field }}: {{ f.problem }}</p>{% endfor %}{% if draft %}<p>Your entries are retained. <a href="{{ post }}?draft={{ draft.id }}{% if editing %}&amp;edit=1{% endif %}">Reload current draft</a> before trying again.</p>{% endif %}</div>{% endif %}
 {% if notice %}<p role="status">{{ notice }}</p>{% endif %}
-{% if committed %}<p><a href="/c/{{ company_id }}/bill/{{ committed.document_id }}">Open posted bill</a> · Batch {{ committed.batch_id }}</p>{% endif %}
+{% if committed %}<p><a data-draft-document href="/c/{{ company_id }}/{{ 'purchase-order' if kind == 'purchase_order' else 'bill' }}/{{ committed.document_id }}">{{ 'Open released purchase order' if kind == 'purchase_order' else 'Open posted bill' }}</a> · Batch {{ committed.batch_id }}</p>{% endif %}
 {% if saved %}<p role="status" data-draft-saved>Draft saved. No accounting effect.</p>{% endif %}
 {% if cancelled %}<p role="status">Draft cancelled. Its history is retained.</p>{% endif %}
-{% if result %}{% set p = result.preview %}<section class="workspace-card" data-draft-preview><h2>Preview — nothing saved or posted</h2><p><strong>Total {{ display_money(p.total) }}</strong></p><p>{{ p.vendor.name }} · {{ p.due_date }} · No accounting effect</p><h3>Lines</h3>{{ lines(p) }}</section>{% endif %}
+{% if result %}{% set p = result.preview %}<section class="workspace-card" data-draft-preview><h2>Preview — nothing saved or posted</h2><p><strong>Total {{ display_money(p.total) }}</strong></p><p>{{ p.vendor.name }}{% if p.due_date %} · {{ p.due_date }}{% endif %} · No accounting effect</p><h3>Lines</h3>{{ lines(p) }}</section>{% endif %}
 {% if editing and can_write and (not draft or draft.state in ('draft', 'rejected')) %}
 <form method="post" action="{{ post }}" hx-post="{{ post }}" hx-target="#purchase-drafts" hx-select="#purchase-drafts" hx-swap="outerHTML" data-draft-form>
-<input type="hidden" name="draft" value="{{ draft.id if draft else '' }}"><input type="hidden" name="expected_version" value="{{ values.expected_version }}"><input type="hidden" name="operation_key" value="{{ values.operation_key }}">
+<input type="hidden" name="kind" value="{{ kind }}"><input type="hidden" name="draft" value="{{ draft.id if draft else '' }}"><input type="hidden" name="expected_version" value="{{ values.expected_version }}"><input type="hidden" name="operation_key" value="{{ values.operation_key }}">
 <h2>Summary</h2><div class="draft-fields">
-{% for key, label, type in [('vendor','Vendor name or ID','text'),('date','Bill date','date'),('number','Bill number (optional)','text'),('supplier_reference','Supplier reference (optional)','text'),('ap_account','Payable account name or ID (optional)','text'),('terms','Terms name or ID (optional)','text'),('due_date','Due date (optional)','date'),('class_id','Class name or ID (optional)','text')] %}<label>{{ label }}<input name="{{ key }}" type="{{ type }}" value="{{ values.get(key, '') }}"{% if key in ('vendor','date') %} required{% endif %}></label>{% endfor %}
+{% set headers = [('vendor','Vendor name or ID','text'),('date','Order date','date'),('number','Order number (optional)','text'),('expected_date','Expected date (optional)','date'),('reference','Supplier reference (optional)','text'),('terms','Terms name or ID (optional)','text'),('class_id','Class name or ID (optional)','text'),('site','Inventory site (optional)','text'),('ship_to','Ship to (optional)','text')] if kind == 'purchase_order' else [('vendor','Vendor name or ID','text'),('date','Bill date','date'),('number','Bill number (optional)','text'),('supplier_reference','Supplier reference (optional)','text'),('ap_account','Payable account name or ID (optional)','text'),('terms','Terms name or ID (optional)','text'),('due_date','Due date (optional)','date'),('class_id','Class name or ID (optional)','text')] %}
+{% for key, label, type in headers %}<label>{{ label }}<input name="{{ key }}" type="{{ type }}" value="{{ values.get(key, '') }}"{% if key in ('vendor','date') %} required{% endif %}></label>{% endfor %}
+{% if kind == 'purchase_order' and values.get('status') %}<input type="hidden" name="status" value="{{ values.status }}">{% endif %}
 <label class="draft-wide">Memo<textarea name="memo" rows="2">{{ values.get('memo', '') }}</textarea></label></div>
-<h2>Lines</h2><div data-draft-lines>
+<h2>Lines</h2>
+{% if kind == 'purchase_order' %}<p>For each line, give an item or an account. Give quantity and rate together, or enter an amount.</p>
+<div data-draft-lines data-line-prefix="order">
+{% for index in indices %}<fieldset data-draft-line="{{ index }}"><legend>Order line {{ loop.index }}</legend><div class="draft-fields">
+{% for key,label in [('item','Item name or ID'),('account','Account name or ID (instead of item)'),('quantity','Quantity'),('rate','Rate'),('amount','Amount (optional with quantity and rate)'),('description','Description'),('customer','Customer or job (optional)'),('class_id','Class (optional)'),('site','Inventory site (optional)')] %}<label>{{ label }}<input name="order:{{ index }}:{{ key }}" value="{{ values.get('order:' ~ index ~ ':' ~ key, '') }}"{% if key in ('quantity','rate','amount') %} inputmode="decimal"{% endif %}></label>{% endfor %}
+<label>Class choice<select name="order:{{ index }}:class_mode">{% for key,label in [('inherit','Use order class'),('none','No class'),('value','Use line class')] %}<option value="{{ key }}"{% if values.get('order:' ~ index ~ ':class_mode', 'inherit') == key %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+<label class="draft-checkbox"><input type="checkbox" name="order:{{ index }}:billable"{% if values.get('order:' ~ index ~ ':billable') == 'on' %} checked{% endif %}> Billable to customer</label>
+<input type="hidden" name="order:{{ index }}:line_id" value="{{ values.get('order:' ~ index ~ ':line_id', '') }}"></div><button type="button" data-draft-remove>Remove line</button></fieldset>{% endfor %}</div>
+<button type="button" data-draft-add>Add order line</button>
+{% else %}<div data-draft-lines>
 {% for index in indices %}<fieldset data-draft-line="{{ index }}"><legend>Expense {{ loop.index }}</legend><div class="draft-fields">
 {% for key,label in [('account','Expense account name or ID'),('amount','Amount'),('memo','Line memo'),('customer','Customer or job (optional)'),('class_id','Class (optional)')] %}<label>{{ label }}<input name="expense:{{ index }}:{{ key }}" value="{{ values.get('expense:' ~ index ~ ':' ~ key, '') }}"{% if key in ('account','amount') %} required{% endif %}{% if key == 'amount' %} inputmode="decimal"{% endif %}></label>{% endfor %}
 <label>Class choice<select name="expense:{{ index }}:class_mode">{% for key,label in [('inherit','Use bill class'),('none','No class'),('value','Use line class')] %}<option value="{{ key }}"{% if values.get('expense:' ~ index ~ ':class_mode', 'inherit') == key %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
 <label class="draft-checkbox"><input type="checkbox" name="expense:{{ index }}:billable"{% if values.get('expense:' ~ index ~ ':billable') == 'on' %} checked{% endif %}> Billable to customer</label>
 <input type="hidden" name="expense:{{ index }}:line_id" value="{{ values.get('expense:' ~ index ~ ':line_id', '') }}"></div><button type="button" data-draft-remove>Remove expense</button></fieldset>{% endfor %}</div>
 <button type="button" data-draft-add>Add expense</button>
+{% endif %}
 <h2>Evidence</h2><label>Reason for this change<textarea name="reason" required rows="2">{{ values.get('reason','') }}</textarea></label>
 <div class="draft-bar"><button name="action" value="preview" data-draft-preview-button>Preview</button><button name="action" value="save" data-draft-save>Save draft</button>{% if draft %}<a href="{{ post }}?draft={{ draft.id }}">Back to saved draft</a>{% endif %}</div>
 </form>
@@ -38,8 +52,8 @@
 <section class="workspace-card"><h2>Summary</h2><p><strong>{{ draft.preview.vendor.name }} · {{ display_money(draft.preview.total) }}</strong></p><p>{{ draft.payload.date }} · <span data-draft-state>{{ draft.state }}</span> · Version {{ draft.version }}</p><p>Created by {{ draft.created_by }}{% if draft.created_at %} · {{ draft.created_at|when }}{% endif %}</p>{% if draft.payload.memo %}<p>{{ draft.payload.memo }}</p>{% endif %}</section>
 <section class="workspace-card"><h2>Lines</h2>{{ lines(draft.preview) }}</section>
 <section class="workspace-card"><h2>Evidence</h2>
-<p>{{ draft.operation|capitalize }} bill{% if draft.original_id %} · Original bill {{ draft.original_id }} · Version {{ draft.original_version }}{% endif %}</p>
-<details><summary>Complete saved bill inputs</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">{{ draft.payload|tojson(indent=2) }}</pre></details>
+<p>{{ draft.operation|capitalize }} {{ noun }}{% if draft.original_id %} · Original {{ noun }} {{ draft.original_id }} · Version {{ draft.original_version }}{% endif %}</p>
+<details><summary>Complete saved {{ noun }} inputs</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">{{ draft.payload|tojson(indent=2) }}</pre></details>
 </section>
 <section class="workspace-card"><h2>History</h2>{% for revision in draft.history %}<article data-draft-history><h3>Version {{ revision.version }} · {{ revision.state }}</h3><p>{{ revision.reason }} · {{ revision.actor }}{% if revision.interface %} via {{ revision.interface }}{% endif %}</p>{% if revision.preview %}<p>{{ display_money(revision.preview.total) }}</p><h4>Lines</h4>{{ lines(revision.preview) }}{% endif %}</article>{% endfor %}</section>
 {% if draft.state in ('draft', 'rejected') %}<div class="actions">{% if can_write and simple_edit %}<a href="{{ post }}?draft={{ draft.id }}&amp;edit=1" data-draft-edit>Edit draft</a>{% elif can_write %}<p>This draft includes source, item or correction fields. <a href="/c/{{ company_id }}/purchase-draft/{{ draft.id }}/update">Open the full draft form</a> to preserve those fields.</p>{% endif %}</div>
@@ -55,21 +69,21 @@
 <form method="post" action="{{ post }}" hx-post="{{ post }}" hx-target="#purchase-drafts" hx-select="#purchase-drafts" hx-swap="outerHTML" data-approval-form>
 <input type="hidden" name="draft" value="{{ draft.id }}"><input type="hidden" name="expected_version" value="{{ values.get('expected_version', draft.version) }}"><input type="hidden" name="operation_key" value="{{ values.operation_key }}">
 <input type="hidden" name="request_id" value="{{ values.get('request_id', draft.request_id or '') }}"><input type="hidden" name="request_version" value="{{ values.get('request_version', draft.request_version or '') }}">
-<h2>{{ 'Review and post' if draft.state == 'approved' else 'Review' if draft.state == 'pending' else 'Next step' }}</h2>
+<h2>{{ ('Review and release' if kind == 'purchase_order' else 'Review and post') if draft.state == 'approved' else 'Review' if draft.state == 'pending' else 'Next step' }}</h2>
 <label>Reason<textarea name="reason" required rows="2">{{ values.get('reason', '') }}</textarea></label>
 {% if draft.state == 'pending' and actions.decide %}<label>Review comment<textarea name="comment" rows="2">{{ values.get('comment', '') }}</textarea></label>{% endif %}
 <div class="draft-bar"><strong>Total {{ display_money(draft.preview.total) }}</strong>
 {% if draft.state == 'draft' and actions.submit %}<button name="action" value="submit">Submit for approval</button>{% endif %}
 {% if draft.state == 'pending' and actions.decide %}<button name="action" value="approve">Approve</button><button name="action" value="reject">Return for revision</button>{% endif %}
-{% if draft.state in ('draft', 'approved') and actions.commit %}<button name="action" value="commit">Commit bill</button>{% endif %}
+{% if draft.state in ('draft', 'approved') and actions.commit %}<button name="action" value="commit">{{ 'Release purchase order' if kind == 'purchase_order' else 'Commit bill' }}</button>{% endif %}
 {% if draft.state in ('pending', 'approved') and actions.withdraw %}
 {% if draft.state == 'approved' and not withdraw_preview %}<button name="action" value="withdraw-preview">Preview withdrawal</button>{% else %}{% if withdraw_preview %}<input type="hidden" name="confirm" value="true">{% endif %}<button name="action" value="withdraw">{{ 'Confirm withdrawal' if withdraw_preview else 'Withdraw submission' }}</button>{% endif %}
 {% endif %}
 </div></form>
 {% endif %}
 {% else %}
-{% if can_write %}<p><a href="{{ post }}?new=1" data-draft-new>New bill draft</a></p>{% endif %}
+{% if can_write %}<p><a href="{{ post }}?new=1" data-draft-new>New bill draft</a> · <a href="{{ post }}?new=1&amp;kind=purchase_order" data-draft-new-order>New purchase order draft</a></p>{% endif %}
 <form method="get"><label>Status<select name="state"><option value="">All</option>{% for state in ('draft', 'pending', 'approved', 'rejected', 'committed', 'cancelled') %}<option value="{{ state }}"{% if request.query_params.get('state') == state %} selected{% endif %}>{{ state|capitalize }}</option>{% endfor %}</select></label><button>Filter</button></form>
-{% for row in listing['items'] %}<article class="workspace-card"><h2><a href="{{ post }}?draft={{ row.id }}">{{ row.preview.vendor.name }}</a></h2><p>{{ display_money(row.preview.total) }} · {{ row.payload.date }} · {{ row.state }}</p><p>Created by {{ row.created_by }}</p></article>{% else %}<p>No saved drafts.</p>{% endfor %}
+{% for row in listing['items'] %}<article class="workspace-card"><h2><a href="{{ post }}?draft={{ row.id }}">{{ row.preview.vendor.name }}</a></h2><p>{{ display_money(row.preview.total) }} · {{ row.payload.date }} · {{ row.kind|replace('_', ' ') }} · {{ row.state }}</p><p>Created by {{ row.created_by }}</p></article>{% else %}<p>No saved drafts.</p>{% endfor %}
 {% if listing.next_cursor %}<a href="{{ post }}?cursor={{ listing.next_cursor|urlencode }}{% if request.query_params.get('state') %}&amp;state={{ request.query_params.get('state')|urlencode }}{% endif %}">Next drafts</a>{% endif %}
 {% endif %}</section>{% endblock %}

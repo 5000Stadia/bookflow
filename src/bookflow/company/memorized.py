@@ -146,6 +146,9 @@ def _common(s, ctx, at, record_id=None):
 
 def _capture(s, command_name, payload, *, warnings):
     """Validate a payload against the command that will replay it, and derive its index."""
+    if command_name == 'purchase-order post':
+        from bookflow.company.approvals import require_native_door
+        require_native_door(s, 'post', target='purchase_order')
     command = edges.resolve_command(command_name)
     if not isinstance(payload, dict):
         raise BookflowError('E_VALIDATION', details={'fields': [{'field': 'payload', 'problem': 'must be a JSON object'}]})

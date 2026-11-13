@@ -163,6 +163,7 @@ Example JSON output:
 
 | Code | Meaning |
 |---|---|
+| `E_APPROVAL_REQUIRED` | This bill requires an approved purchase draft before posting. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |
@@ -1600,6 +1601,7 @@ Example JSON output:
 
 | Code | Meaning |
 |---|---|
+| `E_APPROVAL_REQUIRED` | This bill requires an approved purchase draft before posting. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |

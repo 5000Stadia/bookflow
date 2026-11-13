@@ -3090,3 +3090,15 @@ input = { date = "2026-11-02", amount_minor_units = 2500, memo = "Local expense 
 command = "intercompany-settings update"
 reason = "Leave optional intercompany layers off in the default demo"
 input = { expected_version = 1, linked_entries_enabled = false, templates_enabled = false, bulk_enabled = false }
+
+# Purchase proposals have no open-order or receiving effect until released.
+[[commands]]
+command = "purchase-draft create"
+capture = "saved_order_draft"
+reason = "Prepare an order without releasing it"
+input = { kind = "purchase_order", operation_key = "demo-order-draft", vendor = "${backup_vendor.id}", date = "2026-09-15", lines = [{ account = "${expense_account.id}", quantity = "10", rate = "12.00", description = "Proposed supplies" }] }
+
+[[commands]]
+command = "approval-policy create"
+reason = "Prepare an inert simple purchase review policy"
+input = { target = "purchase_order", eligible_members = ["${saved_order_draft.created_by}"], allow_self = true, enabled = false, operation_key = "demo-order-policy" }
