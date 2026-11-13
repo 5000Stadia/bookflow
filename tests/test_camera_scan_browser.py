@@ -6,7 +6,7 @@ Chrome's fake camera plays a video of barcodes made at test time (--use-fake-dev
     look-up; the list fills its first line and moves to the second with no taps between, and each scan plays a tone;
   - on the count screen two labels in one frame are each counted once, however long both stay in view;
   - with the page made insecure, as plain LAN http is, each tap takes one photo (here on the pick screen), the overlay
-    says why once a session, and a photo of an unknown code buzzes twice and changes nothing;
+    says why once a session, and a photo of an unknown code sounds one falling note and changes nothing;
   - the decoder follows the host's scan_decoders setting from BOOKFLOW_SCAN_DECODERS to the page, with no code change;
     a decoder that will not load, or keeps failing, is passed over for the next;
   - a camera started twice, or closed while starting, leaves no track running once Close returns, and a code read
@@ -30,6 +30,7 @@ pytestmark = pytest.mark.skipif(not CHROME.exists(), reason='Chrome unavailable'
 A2 = '2000000001012'
 SEALANT = '4006381334020'
 UNKNOWN = '5901234123457'
+UNKNOWN_2 = '9780201379624'
 VALVE = '290000000050' + ean13_check_digit('290000000050')
 PIPE = '290000000051' + ean13_check_digit('290000000051')
 WHY = 'Live scanning needs a secure connection. Until Bookflow is set up with HTTPS, each tap takes one photo.'
@@ -134,8 +135,8 @@ def test_the_camera_scans_into_the_pick_screen_line_after_line(browser_site, tmp
         b.wait_for('window.bookflowCamera.signals.length >= 4', timeout=15)   # each beep follows the page's answer
         _close_and_check_tracks(b)
         assert _signals(b)[:4] == [f'found:{A2}'] + [f'found:{SEALANT}'] * 3, _signals(b)
-        # A tone was played for each: one 1,000 Hz beep a scan.
-        assert b.evaluate('window.__tones.filter(f => f === 1000).length') >= 4
+        # A sound was played for each: one ping a scan (its fundamental is 1,319 Hz).
+        assert b.evaluate('window.__tones.filter(f => f === 1319).length') >= 4
         assert all(line['bin'] == 'A2' for line in _command(b, site, 'pick-list.show', {'pick_list': number})['lines'])
         assert b.evaluate('!document.querySelector("[data-camera-video]").srcObject')
         assert b.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1')
@@ -171,7 +172,7 @@ def test_two_labels_in_one_frame_are_each_counted_once_on_the_count_screen(brows
         lines = {line['item_name']: line['counted'] for line in
                  _command(b, site, 'inventory-count.show', {'count': number})['lines']}
         assert lines.get('Brass Shutoff Valve') == '1' and lines.get('Copper Pipe') == '1', lines
-        assert b.evaluate('window.__tones.filter(f => f === 1000).length') == 2
+        assert b.evaluate('window.__tones.filter(f => f === 1319).length') == 2
     finally:
         b.close()
 
@@ -205,17 +206,32 @@ def test_one_photo_per_tap_on_plain_http_and_an_unknown_code_changes_nothing(bro
         assert _photo(b, photo(tmp_path / 'sealant.png', SEALANT))['kind'] == 'found'
         b.wait_for('(document.querySelector("[data-pick-result]")?.innerText || "").includes("picked 1 of 2")', timeout=30)
         picked = _command(b, site, 'pick-list.show', {'pick_list': number})
-        # An unknown code: two low beeps, the field's own "Assign to an item", nothing changes, and the code waits in
+        # An unknown code: one falling note, the field's own "Assign to an item", nothing changes, and the code waits in
         # the field selected, so the next scan replaces it.
         tones = b.evaluate('window.__tones.length')
         assert _photo(b, photo(tmp_path / 'unknown.png', UNKNOWN)) == {
             'kind': 'unknown', 'code': UNKNOWN, 'sound': True, 'decoder': 'zxing-wasm'}
-        assert b.evaluate(f'window.__tones.slice({tones})') == [330, 330]
+        assert b.evaluate(f'window.__tones.slice({tones})') == [660]
         status = b.evaluate('document.querySelector("[data-scan-mode=pick] [data-scan-status]").innerText')
         assert f'No item has the code {UNKNOWN}' in status and 'Assign to an item' in status, status
         assert b.evaluate('''(() => { const i = document.querySelector("[data-scan-mode=pick] [data-scan-input]");
             return [i.value, i.selectionStart, i.selectionEnd, document.activeElement === i]; })()''') == [
             UNKNOWN, 0, len(UNKNOWN), False]
+        assert _command(b, site, 'pick-list.show', {'pick_list': number}) == picked
+        # A second unreadable code takes the first one's place in the field, so the box always shows the last read
+        # for correcting by hand; one sound again.
+        tones = b.evaluate('window.__tones.length')
+        assert _photo(b, photo(tmp_path / 'unknown2.png', UNKNOWN_2))['kind'] == 'unknown'
+        assert b.evaluate(f'window.__tones.slice({tones})') == [660]
+        assert b.evaluate('document.querySelector("[data-scan-mode=pick] [data-scan-input]").value') == UNKNOWN_2, (
+            _signals(b)[-3:], b.evaluate('document.querySelector("[data-scan-mode=pick] [data-scan-status]").innerText'),
+            b.evaluate('document.querySelectorAll("[data-scan-mode=pick] [data-scan-input]").length'))
+        # A hand correction of that code is the person's own: the next read does not wipe it.
+        b.evaluate('''(() => { const i = document.querySelector("[data-scan-mode=pick] [data-scan-input]");
+            i.value = "590123"; })()''')
+        assert _photo(b, photo(tmp_path / 'unknown.png', UNKNOWN))['kind'] == 'unknown'
+        assert b.evaluate('document.querySelector("[data-scan-mode=pick] [data-scan-input]").value') == '590123'
+        b.evaluate('document.querySelector("[data-scan-mode=pick] [data-scan-input]").value = ""')
         assert _command(b, site, 'pick-list.show', {'pick_list': number}) == picked
         # The reason shows once a session: the next tap does not repeat it.
         b.evaluate('document.querySelector("[data-camera-close]").click()')

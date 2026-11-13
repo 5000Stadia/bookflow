@@ -172,9 +172,15 @@
     }
     const want = parse(text);
     want.camera = !!camera;
+    // Each camera read starts clean, as a typed one does: a code an earlier read left in the field for correcting
+    // gives way to this one. Anything the person has typed or changed there since is theirs and stays.
+    if (camera && input.dataset.scanCameraCode !== undefined) {
+      if (input.value === input.dataset.scanCameraCode) input.value = '';
+      delete input.dataset.scanCameraCode;
+    }
     const keepTyped = () => {
       // Nothing typed is lost: the code goes back in the field unless something new is already there.
-      if (!input.value) input.value = text;
+      if (!input.value) { input.value = text; if (camera) input.dataset.scanCameraCode = text; }
       if (document.activeElement === input) input.select();
       // A camera code is selected without focusing (no phone keyboard), so the next scan typed there replaces it.
       else if (camera && input.value === text) { try { input.setSelectionRange(0, text.length); } catch (error) { /* not focusable */ } }
