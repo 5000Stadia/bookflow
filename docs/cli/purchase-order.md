@@ -85,6 +85,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
+| `approval_origin` | string \| null | no | yes | null | Historical release evidence; approval is never inferred for old orders. |
 | `receiving` | array[object] | no | no | [] | — |
 | `receiving[].order_line_id` | string | yes | no | — | — |
 | `receiving[].item_id` | string | yes | no | — | — |
@@ -275,6 +276,7 @@ Example JSON output:
 
 ```json
 {
+  "approval_origin": null,
   "bill_id": null,
   "changed": true,
   "changed_fields": [],
@@ -543,7 +545,7 @@ Example JSON output:
 
 ## `purchase-order post`
 
-Order goods or services from a vendor. A purchase order posts nothing: no account moves, no payable is created and the trial balance is exactly what it was before. It is a commitment to buy, and the books learn about it only when a bill is entered from it. `terms` defaults to the vendor’s own and travels to the bill. `expected_date` is when the vendor promised it and is never before the order date. `ship_to` defaults to the company’s own shipping address. `reference` is the vendor’s quotation or contract number, kept as typed. `lines` is one to 200 ordered rows. Each row names exactly one of `item` or `account`: an item row takes the item’s own purchase account and its purchase description, an account row names the account outright. Give `quantity` and `rate` together and the amount is their product; give `amount` alone for a lump sum, or give it alongside the pair to have the arithmetic checked rather than trusted. A row’s own `class_id` is that row’s class and a row without one takes the order’s; set `class_mode` to `none` to leave one row unclassified. `customer` attributes the cost to a customer or job and `billable` marks it to be passed on to them later, which requires naming one.
+Order goods or services from a vendor. A purchase order posts nothing: no account moves, no payable is created and the trial balance is exactly what it was before. It is a commitment to buy, and the books learn about it only when a bill is entered from it. `terms` defaults to the vendor’s own and travels to the bill. `expected_date` is when the vendor promised it and is never before the order date. `ship_to` defaults to the company’s own shipping address. `reference` is the vendor’s quotation or contract number, kept as typed. `lines` is one to 200 ordered rows. Each row names exactly one of `item` or `account`: an item row takes the item’s own purchase account and its purchase description, an account row names the account outright. Give `quantity` and `rate` together and the amount is their product; give `amount` alone for a lump sum, or give it alongside the pair to have the arithmetic checked rather than trusted. A row’s own `class_id` is that row’s class and a row without one takes the order’s; set `class_mode` to `none` to leave one row unclassified. `customer` attributes the cost to a customer or job and `billable` marks it to be passed on to them later, which requires naming one. When purchase approvals are enabled, direct release and correction refuse E_APPROVAL_REQUIRED; use purchase-draft create, submit and commit.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -642,6 +644,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
+| `approval_origin` | string \| null | no | yes | null | Historical release evidence; approval is never inferred for old orders. |
 | `receiving` | array[object] | no | no | [] | — |
 | `receiving[].order_line_id` | string | yes | no | — | — |
 | `receiving[].item_id` | string | yes | no | — | — |
@@ -832,6 +835,7 @@ Example JSON output:
 
 ```json
 {
+  "approval_origin": null,
   "bill_id": null,
   "changed": true,
   "changed_fields": [],
@@ -926,6 +930,7 @@ Example JSON output:
 | Code | Meaning |
 |---|---|
 | `E_AMOUNT_PRECISION` | The amount has more decimal places than the currency allows. |
+| `E_APPROVAL_REQUIRED` | This bill requires an approved purchase draft before posting. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |
@@ -1035,6 +1040,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items[].updated_at` | string | yes | no | — | — |
 | `items[].updated_by` | string | yes | no | — | — |
 | `items[].updated_via` | string | yes | no | — | — |
+| `items[].approval_origin` | string \| null | no | yes | null | Historical release evidence; approval is never inferred for old orders. |
 | `items[].receiving` | array[object] | no | no | [] | — |
 | `items[].receiving[].order_line_id` | string | yes | no | — | — |
 | `items[].receiving[].item_id` | string | yes | no | — | — |
@@ -1192,6 +1198,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
+| `approval_origin` | string \| null | no | yes | null | Historical release evidence; approval is never inferred for old orders. |
 | `receiving` | array[object] | no | no | [] | — |
 | `receiving[].order_line_id` | string | yes | no | — | — |
 | `receiving[].item_id` | string | yes | no | — | — |
@@ -1380,6 +1387,7 @@ Example JSON output:
 
 ```json
 {
+  "approval_origin": null,
   "bill_id": null,
   "consumed": false,
   "conversion": null,
@@ -1496,7 +1504,7 @@ Example JSON output:
 
 ## `purchase-order update`
 
-Correct a purchase order, or move where it stands. The whole order is replaced and a new immutable revision is appended; every earlier revision stays readable. Supply `lines` to replace the whole grid, carrying each surviving row’s `line_id`; leave it out to correct the header alone and keep the lines exactly as they were captured. `status` is where the order stands: `open` while nothing has arrived, `partly_received` while some of it has, `closed` when nothing more is coming. Closing is a decision a person makes, not one the books make — item receipts do not exist yet — and it is reversible: set the status back to `open`. An order that has already become a bill can no longer be corrected.
+Correct a purchase order, or move where it stands. The whole order is replaced and a new immutable revision is appended; every earlier revision stays readable. Supply `lines` to replace the whole grid, carrying each surviving row’s `line_id`; leave it out to correct the header alone and keep the lines exactly as they were captured. `status` is where the order stands: `open` while nothing has arrived, `partly_received` while some of it has, `closed` when nothing more is coming. Closing is a decision a person makes, not one the books make — item receipts do not exist yet — and it is reversible: set the status back to `open`. An order that has already become a bill can no longer be corrected. When purchase approvals are enabled, direct release and correction refuse E_APPROVAL_REQUIRED; use purchase-draft create, submit and commit.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -1599,6 +1607,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
+| `approval_origin` | string \| null | no | yes | null | Historical release evidence; approval is never inferred for old orders. |
 | `receiving` | array[object] | no | no | [] | — |
 | `receiving[].order_line_id` | string | yes | no | — | — |
 | `receiving[].item_id` | string | yes | no | — | — |
@@ -1789,6 +1798,7 @@ Example JSON output:
 
 ```json
 {
+  "approval_origin": null,
   "bill_id": null,
   "changed": true,
   "changed_fields": [],
@@ -1883,6 +1893,7 @@ Example JSON output:
 | Code | Meaning |
 |---|---|
 | `E_AMOUNT_PRECISION` | The amount has more decimal places than the currency allows. |
+| `E_APPROVAL_REQUIRED` | This bill requires an approved purchase draft before posting. |
 | `E_COMPANY_AMBIGUOUS` | More than one company matches; use the id or Organization/Company. |
 | `E_COMPANY_NOT_FOUND` | No such company. |
 | `E_CONFIG_INVALID` | The configuration file could not be read. |
@@ -1999,6 +2010,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `updated_at` | string | yes | no | — | — |
 | `updated_by` | string | yes | no | — | — |
 | `updated_via` | string | yes | no | — | — |
+| `approval_origin` | string \| null | no | yes | null | Historical release evidence; approval is never inferred for old orders. |
 | `receiving` | array[object] | no | no | [] | — |
 | `receiving[].order_line_id` | string | yes | no | — | — |
 | `receiving[].item_id` | string | yes | no | — | — |
@@ -2189,6 +2201,7 @@ Example JSON output:
 
 ```json
 {
+  "approval_origin": null,
   "bill_id": null,
   "changed": true,
   "changed_fields": [],

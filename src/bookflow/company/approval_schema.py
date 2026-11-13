@@ -1,4 +1,4 @@
-"""Revision-bound bill approval evidence; no approval row is a financial document."""
+"""Revision-bound purchase approval evidence; no approval row is a financial document."""
 import sqlalchemy as sa
 
 
@@ -16,7 +16,7 @@ def define_tables(metadata, C, T, common):
         C('definition', sa.Text, 'Captured policy definition JSON.', nullable=False),
         C('created_at', sa.String(32), 'Publication time.', nullable=False),
         sa.UniqueConstraint('policy_id', 'version'),
-        description='Immutable published simple bill policies.')
+        description='Immutable published simple purchase policies.')
     requests = T('approval_requests',
         C('id', sa.String(26), 'Approval request identity.', primary_key=True),
         C('draft_id', sa.String(26), 'Submitted draft.', sa.ForeignKey('purchase_drafts.id', ondelete='RESTRICT'), nullable=False),
@@ -50,7 +50,9 @@ def define_tables(metadata, C, T, common):
         C('request_id', sa.String(26), 'Captured approval request, absent for layer-off drafts.', sa.ForeignKey('approval_requests.id', ondelete='RESTRICT')),
         C('draft_id', sa.String(26), 'Producing draft.', sa.ForeignKey('purchase_drafts.id', ondelete='RESTRICT'), nullable=False),
         C('draft_version', sa.Integer, 'Committed draft revision.', nullable=False),
-        C('document_id', sa.String(26), 'Native bill.', sa.ForeignKey('transactions.id', ondelete='RESTRICT'), nullable=False),
+        C('document_id', sa.String(26), 'Native bill.', sa.ForeignKey('transactions.id', ondelete='RESTRICT')),
+        C('order_id', sa.String(26), 'Released purchase order; exactly one native document is linked.', sa.ForeignKey('purchase_orders.id', ondelete='RESTRICT')),
+        sa.CheckConstraint('(document_id IS NOT NULL AND order_id IS NULL) OR (document_id IS NULL AND order_id IS NOT NULL)', name='ck_approval_commit_document'),
         C('document_version', sa.Integer, 'Produced native version.', nullable=False),
         C('operation', sa.String(16), 'create or correct.', nullable=False),
         C('batch_id', sa.String(26), 'Reversible unit.', sa.ForeignKey('batches.id', ondelete='RESTRICT'), nullable=False, unique=True),

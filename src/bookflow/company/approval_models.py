@@ -1,4 +1,4 @@
-"""Simple bill approval command contracts."""
+"""Simple purchase approval command contracts."""
 from typing import Literal, Any
 from pydantic import Field
 from bookflow.company.journal_models import _Input, _Selector, _Version
@@ -25,7 +25,7 @@ class DecideInput(RequestInput):
     operation_key: str = Field(min_length=1, max_length=128)
 
 class PolicyCreateInput(_Input):
-    target: Literal['bill'] = 'bill'
+    target: Literal['bill', 'purchase_order'] = 'bill'
     eligible_members: list[_Selector] = Field(min_length=1, max_length=100)
     allow_self: bool = False
     enabled: bool = True
@@ -49,7 +49,7 @@ class PolicyListInput(_Input):
 class PolicyOutput(_Input):
     id: str
     version: int
-    target: Literal['bill']
+    target: Literal['bill', 'purchase_order']
     state: Literal['draft', 'published']
     eligible_members: list[str]
     allow_self: bool

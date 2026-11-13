@@ -160,8 +160,8 @@ for _name in ('memorized enter', 'memorized process', 'memorized retry', 'memori
 
 
 ERRORS = {
-    'memorized create': ['E_VALIDATION', 'E_NAME_TAKEN', 'E_RECORD_NOT_FOUND'],
-    'memorized update': ['E_VALIDATION', 'E_NAME_TAKEN', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT'],
+    'memorized create': ['E_VALIDATION', 'E_NAME_TAKEN', 'E_RECORD_NOT_FOUND', 'E_APPROVAL_REQUIRED'],
+    'memorized update': ['E_VALIDATION', 'E_NAME_TAKEN', 'E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_APPROVAL_REQUIRED'],
     'memorized delete': ['E_RECORD_NOT_FOUND', 'E_VERSION_CONFLICT', 'E_VALIDATION'],
     'memorized enter': ['E_RECORD_NOT_FOUND', 'E_VALIDATION', 'E_PREVIEW_STALE'],
     'memorized process': ['E_RECORD_NOT_FOUND', 'E_VALIDATION', 'E_PREVIEW_STALE'],

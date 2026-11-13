@@ -100,6 +100,7 @@ def catalog_bundle() -> s.CatalogBundle:
 # the chain is imported anyway -- at module scope it would force that import on every
 # command and cost roughly half a second, against nothing here.
 ACCEPTED_DESCRIPTOR_SHA256 = {
+    c.PURCHASE_APPROVAL_POLICY_VERSION: '5671a7352e075127e5e66c35c431c26865aa56e10ea2069d1db43bcc2f1c6ee8',
     c.INTERCOMPANY_SETUP_POLICY_VERSION: '67602d51a720ba672a62fe16afbe33cab1f266d96b4ceaf24ebedd3705f7f63f',
     c.PAYROLL_DRAFT_POLICY_VERSION: '365f7a60586a9ad2bef7341b77905c85a4816b033177fc22215ac0c63155419a',
     c.SCOPED_POLICY_VERSION: 'a0823e6d9ae98e96c98e2b6e4e73042ecc8ecb7cf0e7d4d9b50e8febc7ed6979',
@@ -383,6 +384,7 @@ def _full_known():
     from . import permission_commission_pos_catalog
     from . import permission_crm_convert_catalog
     from . import permission_payroll_post_catalog
+    from . import permission_purchase_approval_catalog
     from . import permission_membership_sales_catalog
     from . import permission_crm_leads_catalog
     from . import permission_payroll_draft_catalog
@@ -500,6 +502,7 @@ def _full_known():
         c.COMMISSION_POS_POLICY_VERSION: permission_commission_pos_catalog,
         c.CRM_CONVERT_POLICY_VERSION: permission_crm_convert_catalog,
         c.PAYROLL_POST_POLICY_VERSION: permission_payroll_post_catalog,
+        c.PURCHASE_APPROVAL_POLICY_VERSION: permission_purchase_approval_catalog,
         c.MEMBERSHIP_SALES_POLICY_VERSION: permission_membership_sales_catalog,
         c.NOTICE_REVERSAL_POLICY_VERSION: permission_notice_reversal_catalog,
         c.COMMISSION_ATTRIBUTION_POLICY_VERSION: permission_commission_attribution_catalog,
@@ -665,7 +668,7 @@ def known_catalog(version):
 
 def current_catalog():
     """Executable descriptor owner; this accessor does not activate a root."""
-    return known_catalog(c.MEMBERSHIP_SALES_POLICY_VERSION)
+    return known_catalog(c.PURCHASE_APPROVAL_POLICY_VERSION)
 
 
 def catalog_for_root(tx):

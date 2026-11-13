@@ -1,4 +1,4 @@
-"""One-step bill approval. Approval evidence and native money writes share a writer."""
+"""One-step purchase approval. Approval evidence and native money writes share a writer."""
 import json
 import sqlalchemy as sa
 from bookflow.company import schema as c, purchase_drafts as d, approval_models as m
@@ -17,59 +17,77 @@ def principal(s, ctx):
     return capabilities.principal_of(s) or ctx.on_behalf_of if s.actor.kind != 'human' else s.actor.id
 
 
-def enabled(s):
-    return bool(s.company.conn.execute(sa.select(c.company_info.c.bill_approvals_enabled)).scalar())
+def enabled(s, target='bill'):
+    column = c.company_info.c.purchase_approvals_enabled if target == 'purchase_order' else c.company_info.c.bill_approvals_enabled
+    return bool(s.company.conn.execute(sa.select(column)).scalar())
 
 
-def require_native_door(s, operation, bill=None):
+def domain(target):
+    from bookflow.company import bills, purchase_orders
+    return purchase_orders if target == 'purchase_order' else bills
+
+
+def payload_module(target):
+    from bookflow.company import approval_bill_payload, approval_purchase_payload
+    return approval_purchase_payload if target == 'purchase_order' else approval_bill_payload
+
+
+def native_command(target):
+    return 'purchase-order' if target == 'purchase_order' else 'bill'
+
+
+def require_native_door(s, operation, bill=None, target='bill'):
     if operation not in ('post', 'update', 'restore'):
         return
     captured = False
     if bill:
-        from bookflow.company import bills
-        identity = bills.resolve(s, bill)['id']
+        identity = domain(target).resolve(s, bill)['id']
         captured = s.company.conn.execute(sa.select(c.purchase_drafts.c.id).where(
-            c.purchase_drafts.c.original_id == identity,
-            c.purchase_drafts.c.state.in_(['pending', 'approved']))).first() is not None
-    if enabled(s) or captured:
-        fail('E_APPROVAL_REQUIRED', 'bill ' + operation + ' requires an approved purchase draft; use purchase-draft create, submit and commit.',
-             command='bill ' + operation, next_command='purchase-draft create')
+            (c.purchase_drafts.c.original_order_id if target == 'purchase_order' else c.purchase_drafts.c.original_id) == identity, c.purchase_drafts.c.kind == target,
+            c.purchase_drafts.c.state.in_(['draft', 'rejected', 'pending', 'approved']),
+            sa.exists(sa.select(c.approval_requests.c.id).where(c.approval_requests.c.draft_id == c.purchase_drafts.c.id)))).first() is not None
+    if enabled(s, target) or captured:
+        fail('E_APPROVAL_REQUIRED', native_command(target) + ' ' + operation + ' requires an approved purchase draft; use purchase-draft create, submit and commit.',
+             command=native_command(target) + ' ' + operation, next_command='purchase-draft create')
 
 
 _SEAL = object()
 
 
-def validate_native_seal(s, plan):
+def validate_native_seal(s, plan, target='bill'):
     if plan.data.get('_approval_seal') is _SEAL:
         return
-    require_native_door(s, plan.data['operation'], getattr(plan.data.get('input'), 'bill', None))
+    require_native_door(s, plan.data['operation'], getattr(plan.data.get('input'), 'purchase_order' if target == 'purchase_order' else 'bill', None), target)
 
 
 def native_write(s, ctx, inp, operation, draft_id, inverse_commit_id=None):
-    from bookflow.company import bills
-    access.require_resource(s, 'ledger.post', 'standard')
-    capabilities.require_company(s, 'bill ' + operation)
     draft = d.row(s, draft_id)
+    target = draft['kind']
+    bills = domain(target)
+    access.require_resource(s, 'ledger.post', 'standard')
+    capabilities.require_company(s, native_command(target) + ' ' + operation)
     if inverse_commit_id is None:
-        if draft['state'] != 'approved' and (draft['state'] != 'draft' or enabled(s)):
+        if draft['state'] != 'approved' and (draft['state'] != 'draft' or required(s, draft)):
             fail('E_APPROVAL_REQUIRED', 'Commit requires the approved draft revision.')
         if draft['state'] != 'approved':
-            require_native_door(s, operation, getattr(inp, 'bill', None))
+            require_native_door(s, operation, getattr(inp, 'purchase_order' if target == 'purchase_order' else 'bill', None), target)
     else:
         commit = get(s, c.approval_commits, inverse_commit_id)
         if commit['draft_id'] != draft_id or commit['operation'] != 'correct' or draft['state'] != 'committed':
             fail('E_APPROVAL_STATE', 'The inverse must match this committed correction.')
-        if inp.bill != commit['document_id']:
-            fail('E_APPROVAL_STATE', 'The inverse must target its committed native bill.')
+        if getattr(inp, 'purchase_order' if target == 'purchase_order' else 'bill') != commit['document_id']:
+            fail('E_APPROVAL_STATE', 'The inverse must target its committed native document.')
         expected = json.loads(commit['before_payload'])
         proposed = inp.model_dump(mode='json', exclude_unset=True)
-        for key in ('bill', 'expected_version'):
+        for key in ('bill', 'purchase_order', 'expected_version'):
             expected.pop(key, None)
             proposed.pop(key, None)
         if expected != proposed:
             fail('E_APPROVAL_STALE', 'The inverse must restore the captured prior commercial payload.')
     plan = bills._prepare_native(s, ctx, inp, operation)
-    if inverse_commit_id is not None:
+    if inverse_commit_id is not None and target == 'purchase_order':
+        payload_module(target).validate_inverse(plan, json.loads(commit['before_snapshot']))
+    if inverse_commit_id is not None and target == 'bill':
         expected_snapshot = json.loads(commit['before_snapshot'])
         # The inverse re-enters exact captured values, but their provenance remains
         # the original policy/default choice, not a new user-entered choice.
@@ -92,7 +110,10 @@ def get(s, table, identity):
     row = s.company.conn.execute(sa.select(table).where(table.c.id == identity)).mappings().first()
     if row is None:
         fail('E_RECORD_NOT_FOUND', 'Record not found.', record_type=table.name, selector=identity)
-    return dict(row)
+    value = dict(row)
+    if table is c.approval_commits and value.get('order_id'):
+        value['document_id'] = value['order_id']
+    return value
 
 
 def version(row, expected):
@@ -116,6 +137,10 @@ def request_for(s, draft):
     return dict(row) if row else None
 
 
+def required(s, draft):
+    return enabled(s, draft['kind']) or request_for(s, draft['id']) is not None
+
+
 def request_output(s, row):
     events = [dict(e, data=json.loads(e['data'])) for e in s.company.conn.execute(sa.select(c.approval_events).where(
         c.approval_events.c.draft_id == row['draft_id']).order_by(c.approval_events.c.sequence)).mappings()]
@@ -130,7 +155,7 @@ def record_transition(s, ctx, draft, new_state, action, data=None):
                  updated_at=at, updated_by=s.actor.id, updated_via=ctx.interface.value)
     if 'original_version' in data:
         after['original_version'] = data['original_version']
-    s.company.conn.execute(c.purchase_drafts.update().where(c.purchase_drafts.c.id == draft['id']).values(**after))
+    s.company.conn.execute(c.purchase_drafts.update().where(c.purchase_drafts.c.id == draft['id']).values(**d.stored(after)))
     s.company.conn.execute(c.purchase_draft_revisions.insert().values(id=new_id(), draft_id=draft['id'],
         version=after['version'], state=new_state, payload=after['payload'], preview=after['preview'], actor=s.actor.id,
         principal=principal(s, ctx), interface=ctx.interface.value, reason=ctx.reason, created_at=at))
@@ -149,12 +174,12 @@ def record_transition(s, ctx, draft, new_state, action, data=None):
     return after
 
 
-def active_policy(s):
+def active_policy(s, target='bill'):
     row = s.company.conn.execute(sa.select(c.approval_policy_revisions).join(c.approval_policies,
         c.approval_policies.c.id == c.approval_policy_revisions.c.policy_id).where(
-        c.approval_policies.c.target == 'bill').order_by(c.approval_policy_revisions.c.publication_sequence.desc()).limit(1)).mappings().first()
+        c.approval_policies.c.target == target).order_by(c.approval_policy_revisions.c.publication_sequence.desc()).limit(1)).mappings().first()
     if row is None:
-        fail('E_APPROVAL_POLICY', 'Publish a bill policy with eligible reviewers first.')
+        fail('E_APPROVAL_POLICY', 'Publish a ' + native_command(target) + ' policy with eligible reviewers first.')
     return dict(row)
 
 
@@ -197,7 +222,8 @@ def recover(inp, ctx, s):
     command = command_name(inp)
     if isinstance(inp, m.CommitInput):
         access.require_resource(s, 'ledger.post', 'standard')
-        capabilities.require_company(s, 'bill post', 'ledger.post')
+        draft = d.row(s, inp.draft)
+        capabilities.require_company(s, native_command(draft['kind']) + (' update' if draft['operation'] == 'correct' else ' post'), 'ledger.post')
     if isinstance(inp, m.PolicyPublishInput):
         require_settings_admin(s, ctx)
     row = s.company.conn.execute(sa.select(c.approval_operations).where(c.approval_operations.c.command == command,
@@ -246,7 +272,9 @@ def prepare(s, ctx, inp):
             after = dict(before, state='published')
         else:
             definition = dict(eligible_members=member_ids(s, inp.eligible_members), allow_self=inp.allow_self, enabled=inp.enabled)
-            after = dict(before or {}, target='bill', state='draft', definition=d.encoded(definition))
+            after = dict(before or {}, target=before['target'] if before else inp.target, state='draft', definition=d.encoded(definition))
+            if before and 'target' in inp.model_fields_set and inp.target != before['target']:
+                fail('E_APPROVAL_POLICY', 'A policy target cannot change; create a separate policy.')
         if not before:
             after.update(id=new_id(), created_at=at, created_by=s.actor.id, created_via=ctx.interface.value)
         after.update(version=before['version']+1 if before else 1, updated_at=at, updated_by=s.actor.id, updated_via=ctx.interface.value)
@@ -269,12 +297,13 @@ def prepare(s, ctx, inp):
     data['req'] = req
     if isinstance(inp, m.SubmitInput):
         state(draft, ['draft'])
-        if not enabled(s):
-            fail('E_APPROVAL_POLICY', 'Bill approvals are off; commit the draft directly.')
-        policy = active_policy(s)
+        if not required(s, draft):
+            fail('E_APPROVAL_POLICY', 'Approvals for this target are off; commit the draft directly.')
+        policy = (active_policy(s, draft['kind']) if enabled(s, draft['kind']) else
+                  get(s, c.approval_policy_revisions, req['policy_revision_id']))
         definition = json.loads(policy['definition'])
         member_ids(s, definition['eligible_members'])
-        from bookflow.company.approval_bill_payload import calculate
+        calculate = payload_module(draft['kind']).calculate
         payload, snapshot, native = calculate(s, ctx, json.loads(draft['payload']), draft['operation'], draft['original_id'], draft['original_version'])
         if draft.get('snapshot') and json.loads(draft['snapshot']) != snapshot:
             fail('E_APPROVAL_STALE', 'The draft calculation changed; update it before submitting.', changed_fields=['snapshot'])
@@ -297,12 +326,12 @@ def prepare(s, ctx, inp):
     if req and req['state'] in ('pending', 'approved'):
         version(req, inp.expected_request_version)
         state(req, ['approved'])
-    if draft['state'] == 'draft' and enabled(s):
+    if draft['state'] == 'draft' and required(s, draft):
         fail('E_APPROVAL_REQUIRED', 'Submit this draft and obtain approval before committing.')
     if draft['state'] == 'draft':
         req = None
         data['req'] = None
-    from bookflow.company.approval_bill_payload import calculate
+    calculate = payload_module(draft['kind']).calculate
     payload, snapshot, native = calculate(s, ctx, json.loads(draft['payload']), draft['operation'], draft['original_id'], draft['original_version'])
     if draft.get('snapshot') and json.loads(draft['snapshot']) != snapshot:
         fail('E_APPROVAL_STALE', 'The approved calculation or sources changed; withdraw, update and resubmit.', changed_fields=['snapshot'])
@@ -335,7 +364,8 @@ def apply(plan, ctx, s):
             publication_sequence = (s.company.conn.execute(sa.select(sa.func.max(c.approval_policy_revisions.c.publication_sequence))).scalar() or 0) + 1
             s.company.conn.execute(c.approval_policy_revisions.insert().values(id=new_id(), publication_sequence=publication_sequence, policy_id=after['id'],
                 version=after['version'], definition=after['definition'], created_at=clock.now_iso()))
-            s.company.conn.execute(c.company_info.update().values(bill_approvals_enabled=json.loads(after['definition'])['enabled']))
+            flag = 'purchase_approvals_enabled' if after['target'] == 'purchase_order' else 'bill_approvals_enabled'
+            s.company.conn.execute(c.company_info.update().values(**{flag: json.loads(after['definition'])['enabled']}))
         touched.append(Touched('approval_policy',after['id'],'update' if before else 'create', before['version'] if before else None,after['version'],after,before,db='company'))
         result = fresh.preview
     else:
@@ -353,18 +383,21 @@ def apply(plan, ctx, s):
                 dict(comment=inp.comment) if isinstance(inp,m.DecideInput) else {})
             result = request_output(s,after_req) if isinstance(inp,m.DecideInput) else d.output(s,after)
         else:
-            from bookflow.company import bills, batches
+            from bookflow.company import batches
+            bills = domain(draft['kind'])
             native = data['native']
             before_payload = None
             if draft['operation'] == 'correct':
-                from bookflow.company.approval_bill_payload import prior_payload
+                prior_payload = payload_module(draft['kind']).prior_payload
                 before_payload = d.encoded(prior_payload(s, native.data['before']))
             native_applied = bills.persist_prepared(native,ctx,s,command_name=name)
             touched.extend(native_applied.touched)
-            batch = batches._insert_batch(s,ctx,kind='approval-commit',label='Approved bill commit',scope=draft['id'],ordering='record',source_type='purchase_draft',source_id=draft['id'])
+            batch = batches._insert_batch(s,ctx,kind='approval-commit',label='Approved purchase commit',scope=draft['id'],ordering='record',source_type='purchase_draft',source_id=draft['id'])
             commit_id = new_id()
             s.company.conn.execute(c.approval_commits.insert().values(id=commit_id,request_id=req['id'] if req else None,
-                draft_id=draft['id'],draft_version=draft['version']+1,document_id=native.preview.id,document_version=native.preview.version,
+                draft_id=draft['id'],draft_version=draft['version']+1,
+                document_id=native.preview.id if draft['kind'] == 'bill' else None,
+                order_id=native.preview.id if draft['kind'] == 'purchase_order' else None,document_version=native.preview.version,
                 operation=draft['operation'],batch_id=batch,before_payload=before_payload,before_snapshot=d.encoded(bills._saved_semantic(s,native.data['old_revision'])) if draft['operation']=='correct' else None,created_at=clock.now_iso()))
             batches.record_effect(s,batch,record_type='approval_commit',record_id=commit_id,action='created',version_after=1,event_id=native.data['event'])
             if req:

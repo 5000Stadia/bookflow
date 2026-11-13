@@ -492,7 +492,8 @@ def test_material_variant_inventory_is_finite_and_does_not_hide_open_cases():
     # nullable beside the percentage's nullable rate_millionths and base (+3). No new variant kind.
     # R188 increment 2: 4799 -> 4805. customer membership list 3 (plan, as_of, cursor), inherit 1 (expected_version),
     # enroll 1 (end_date); pos sale complete's nullable expected_membership 1. No new variant kind.
-    assert sum(len(group["paths"]) for group in mapped)==4805  # R186 trial fixes: batch query date_from and date_to add two nullable inputs. R186: batch reverse fingerprint adds one nullable input; notice reverse adds nullable note and expected_version
+    # Purchase approval: 4805 -> 4839, 17 native PO payload paths on each draft create/update.
+    assert sum(len(group["paths"]) for group in mapped)==4839  # R186 trial fixes: batch query date_from and date_to add two nullable inputs. R186: batch reverse fingerprint adds one nullable input; notice reverse adds nullable note and expected_version
     assert all(group['browser_witnesses'] for group in mapped)
     # The full GUI gate is still OPEN; don't silently relabel schema nodes as
     # accepted journeys. This test guards the accounting, not their acceptance.

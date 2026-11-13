@@ -389,6 +389,43 @@ part of this design commit.
 3. **Purchase release and conversions (M).** PO drafts, simple purchase policy, release/correction and receiving,
    partial-bill and commission-draft seams. **Done when:** fixture 3 and affiliate transfer wait correctly. **Tests:**
    racing consumption, receipt clearing, old-order migration, sent-order reversal blocker, distinct PO/bill approvals.
+   #### As built — increment 3
+
+   The existing purchase-draft commands accept `kind=purchase_order` with the native ordered item/account grid,
+   shipping, expected date, site, class and reference fields. The same simple policy commands accept the purchase
+   target independently of bills. Only publication enables its switch. Native preparation and persistence both
+   enforce the shared approval gate; ordinary CLI, MCP, browser, import, memorized and shortfall producers cannot
+   release or correct an order while approval is required. With no published policy the ordinary route is unchanged.
+
+   Submission captures normalized native commercial facts and exact totals. Release revalidates them in the same
+   transaction as native order persistence, approval history, permanent retry receipt and the existing approval-commit
+   batch effect. No draft, submission or decision creates an open order, stock, payable or ledger entry. Corrections
+   leave the released order usable until commit; intervening receipts or bills invoke native dependency refusals.
+   Receiving and partial bills consume released orders through their existing commands. A purchase approval never
+   substitutes for a bill approval. Previously submitted drafts retain an approval requirement after policy disable,
+   including withdrawal and revision; resubmission while disabled uses their captured policy.
+
+   Migration `co0139` preserves bill drafts and commit evidence, adding separate RESTRICT purchase-order foreign keys
+   for correction targets and native commits. The public original/document IDs remain uniform across both kinds.
+   `purchase-approval-v1` extends `membership-sales-v1` with updated conditional resource locations, without adding
+   commands, capabilities, presets or default grants. Both native targets already use `ledger.read`; draft reads,
+   request history and policy reads keep `approval.read` plus that resource, while preparation uses `approval.prepare`.
+   Decisions still require assignment, current decide/read rights and distinct effective principal unless allowed;
+   commit and retry additionally require the current native posting command. No reviewer gains posting authority.
+
+   The browser has native PO draft fields and distinct Submit, Approve and Release acts, all htmx. The demo contains
+   an unreleased ten-unit proposal and an inert simple purchase policy. Creation inverse uses native void; correction
+   inverse restores captured native commercial facts and provenance, rebasing the proposal only after success.
+   Receiving, conversion and close/reopen of released line capacity remain native workflow acts, not new releases.
+
+   This increment does not add amount bands, sequential review, reassignment, inbox, reminders or batch decisions.
+   Commission affiliate draft claims belong to the parallel commission builder. The native delivery module does not
+   yet accept purchase orders, so a sent-order journey cannot run here; the shared inverse checks sent/exported
+   native delivery links whenever present. No purchase sending or draft PDF facility is invented in this increment.
+   Native purchase orders are not memorizable; an attempt under an enabled purchase policy names the required draft
+   route before the ordinary unsupported-template validation. Historical order reads label their release origin
+   without inventing approval events for old orders.
+
 4. **Optional routes and local reminders (M).** Amount bands, sequential steps, identity rules, reassignment/inbox.
    **Done when:** $130 routes to two reviewers and neither same-principal nor inactive reviewer bypasses. **Tests:**
    every band boundary, invalid bands, deadlines, policy edits, switch-off with pending work, no outbound messages.

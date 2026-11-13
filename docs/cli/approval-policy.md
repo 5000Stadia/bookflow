@@ -4,7 +4,7 @@
 
 ## `approval-policy create`
 
-Save a simple bill Review policy with explicit eligible company member user IDs. Does not enable approvals until published. allow_self defaults false.
+Save a simple purchase Review policy with explicit eligible company member user IDs. Does not enable approvals until published. allow_self defaults false.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -35,7 +35,7 @@ The same example as complete `bookflow_run` arguments:
 
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
-| `target` | `--target` | literal["bill"] | no | no | "bill" | — |
+| `target` | `--target` | literal["bill", "purchase_order"] | no | no | "bill" | — |
 | `eligible_members` | `--eligible-members` | array[string] | yes | no | — | — |
 | `allow_self` | `--allow-self` | boolean | no | no | false | — |
 | `enabled` | `--enabled` | boolean | no | no | true | — |
@@ -79,7 +79,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `id` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
-| `target` | literal["bill"] | yes | no | — | — |
+| `target` | literal["bill", "purchase_order"] | yes | no | — | — |
 | `state` | literal["draft", "published"] | yes | no | — | — |
 | `eligible_members` | array[string] | yes | no | — | — |
 | `allow_self` | boolean | yes | no | — | — |
@@ -142,7 +142,7 @@ Example JSON output:
 
 ## `approval-policy list`
 
-Page bill policies in stable ID order.
+Page purchase policies in stable ID order.
 
 | Contract | Value |
 |---|---|
@@ -203,7 +203,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `items` | array[object] | yes | no | — | — |
 | `items[].id` | string | yes | no | — | — |
 | `items[].version` | integer | yes | no | — | — |
-| `items[].target` | literal["bill"] | yes | no | — | — |
+| `items[].target` | literal["bill", "purchase_order"] | yes | no | — | — |
 | `items[].state` | literal["draft", "published"] | yes | no | — | — |
 | `items[].eligible_members` | array[string] | yes | no | — | — |
 | `items[].allow_self` | boolean | yes | no | — | — |
@@ -260,7 +260,7 @@ Example JSON output:
 
 ## `approval-policy publish`
 
-Publish the exact policy revision and its bill approval switch. Requires company admin plus approval.manage and confirm=true after preview. Disabling affects future submissions only.
+Publish the exact policy revision and its target approval switch. Requires company admin plus approval.manage and confirm=true after preview. Disabling affects future submissions only.
 
 A dry run previews the proposed result without saving it. Any proposed record IDs or posted status in that preview describe the prospective save, not an existing saved record.
 
@@ -334,7 +334,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `id` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
-| `target` | literal["bill"] | yes | no | — | — |
+| `target` | literal["bill", "purchase_order"] | yes | no | — | — |
 | `state` | literal["draft", "published"] | yes | no | — | — |
 | `eligible_members` | array[string] | yes | no | — | — |
 | `allow_self` | boolean | yes | no | — | — |
@@ -397,7 +397,7 @@ Example JSON output:
 
 ## `approval-policy show`
 
-Show a simple bill policy and its current saved revision.
+Show a simple purchase policy and its current saved revision.
 
 | Contract | Value |
 |---|---|
@@ -456,7 +456,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `id` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
-| `target` | literal["bill"] | yes | no | — | — |
+| `target` | literal["bill", "purchase_order"] | yes | no | — | — |
 | `state` | literal["draft", "published"] | yes | no | — | — |
 | `eligible_members` | array[string] | yes | no | — | — |
 | `allow_self` | boolean | yes | no | — | — |
@@ -549,7 +549,7 @@ The same example as complete `bookflow_run` arguments:
 | JSON field | CLI input | Type | Required | Nullable | Default | Description and constraints |
 |---|---|---|---|---|---|---|
 | `policy` | `--policy` | string | yes | no | — | minimum length 1 |
-| `target` | `--target` | literal["bill"] | no | no | "bill" | — |
+| `target` | `--target` | literal["bill", "purchase_order"] | no | no | "bill" | — |
 | `eligible_members` | `--eligible-members` | array[string] | yes | no | — | — |
 | `allow_self` | `--allow-self` | boolean | no | no | false | — |
 | `enabled` | `--enabled` | boolean | no | no | true | — |
@@ -594,7 +594,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 |---|---|---|---|---|---|
 | `id` | string | yes | no | — | — |
 | `version` | integer | yes | no | — | — |
-| `target` | literal["bill"] | yes | no | — | — |
+| `target` | literal["bill", "purchase_order"] | yes | no | — | — |
 | `state` | literal["draft", "published"] | yes | no | — | — |
 | `eligible_members` | array[string] | yes | no | — | — |
 | `allow_self` | boolean | yes | no | — | — |

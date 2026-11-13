@@ -302,6 +302,7 @@ class PurchaseOrderCloseLinesInput(_Input):
 
 
 class PurchaseOrderSummaryOutput(CommonOut):
+    approval_origin: str | None = Field(default=None, description='Historical release evidence; approval is never inferred for old orders.')
     receiving: list[PurchaseOrderReceivingOutput] = Field(default_factory=list)
     line_tracking: list[PurchaseOrderLineTracking] = Field(default_factory=list)
     part_bill_ids: list[str] = Field(default_factory=list)

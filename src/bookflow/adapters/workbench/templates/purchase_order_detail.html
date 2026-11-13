@@ -4,6 +4,7 @@
 {% set tracked = {} %}{% for line in record.line_tracking or [] %}{% set _ = tracked.update({line.line_id: line}) %}{% endfor %}
 {% macro quantity(micro) %}{{ '%g' % (micro / 1000000) }}{% endmacro %}
 <section class="workspace-card sales-document" aria-label="Purchase order">
+{% if record.approval_origin %}<p>{{ record.approval_origin }}</p>{% endif %}
 <p><strong>{{ ui_words(record.status) }}</strong> · {{ record.date|longday }}{% if r.revision_number > 1 %} · Revised (revision {{ r.revision_number }}){% endif %} · {{ record.currency }}</p>
 {% if record.void_reason %}<p class="warn">Voided: {{ record.void_reason }}</p>{% endif %}
 {% if record.status in ('open', 'partly_received') %}<p class="actions"><a class="primary-action" href="/c/{{ company_id }}/item-receipt/post?purchase_order={{ record.id }}">Receive items</a> <a href="/c/{{ company_id }}/purchase-order/{{ record.id }}/bill-part">Bill part of the order or close lines</a></p>{% elif record.status == 'closed' and not record.consumed %}<p class="actions"><a href="/c/{{ company_id }}/purchase-order/{{ record.id }}/bill-part">Reopen lines</a></p>{% endif %}

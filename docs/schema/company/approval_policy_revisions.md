@@ -2,7 +2,7 @@
 
 # `company.approval_policy_revisions`
 
-Immutable published simple bill policies.
+Immutable published simple purchase policies.
 
 Database: `company`.
 

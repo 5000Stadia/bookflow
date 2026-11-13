@@ -3789,6 +3789,7 @@ Send the input object as JSON. Authentication may instead come from a browser se
 | `purchase_order.updated_at` | string | yes | no | — | — |
 | `purchase_order.updated_by` | string | yes | no | — | — |
 | `purchase_order.updated_via` | string | yes | no | — | — |
+| `purchase_order.approval_origin` | string \| null | no | yes | null | Historical release evidence; approval is never inferred for old orders. |
 | `purchase_order.receiving` | array[object] | no | no | [] | — |
 | `purchase_order.receiving[].order_line_id` | string | yes | no | — | — |
 | `purchase_order.receiving[].item_id` | string | yes | no | — | — |
@@ -3998,6 +3999,7 @@ Example JSON output:
   "left_for_other_vendors": [],
   "links": [],
   "purchase_order": {
+    "approval_origin": null,
     "bill_id": null,
     "changed": true,
     "changed_fields": [],

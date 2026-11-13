@@ -339,7 +339,19 @@ def summary(s, header, rev, conversion=None):
     tracking = [order_billing.line_output(state) for state in order_billing.line_states(s, header, rev)]
     parts = sorted({row['bill_id'] for row in order_billing.active_bill_claims(
         s, line_ids=[state['line_id'] for state in tracking])})
-    return dict(header, receiving=order_remaining(s, header, rev), line_tracking=tracking,
+    approved = s.company.conn.execute(sa.select(c.approval_commits.c.id).where(
+        c.approval_commits.c.order_id == header['id'], c.approval_commits.c.operation == 'create',
+        c.approval_commits.c.request_id.is_not(None))).first()
+    publications = s.company.conn.execute(sa.select(c.approval_policy_revisions.c.created_at,
+        c.approval_policy_revisions.c.definition).join(c.approval_policies,
+        c.approval_policies.c.id == c.approval_policy_revisions.c.policy_id).where(
+        c.approval_policies.c.target == 'purchase_order')).all()
+    previously_enabled = any(at <= header['created_at'] and json.loads(definition)['enabled']
+                             for at, definition in publications)
+    origin = ('Released through approval' if approved else
+              'Created while purchase approvals were off' if previously_enabled else
+              'Created before approvals were enabled')
+    return dict(header, approval_origin=origin, receiving=order_remaining(s, header, rev), line_tracking=tracking,
                 part_bill_ids=parts, date=rev['date'], vendor_id=rev['vendor_id'], vendor_name=captured.vendor.label,
                 expected_date=rev['expected_date'], reference=rev['reference'], memo=rev['memo'],
                 currency=currency, total_minor_units=rev['total_minor_units'],
@@ -631,6 +643,12 @@ def commercial(s, inp, old_header, old_revision, *, document_id):
 
 
 def prepare(s, ctx, inp, operation):
+    from bookflow.company.approvals import require_native_door
+    require_native_door(s, operation, getattr(inp, 'purchase_order', None), target='purchase_order')
+    return _prepare_native(s, ctx, inp, operation)
+
+
+def _prepare_native(s, ctx, inp, operation):
     old_header = resolve(s, inp.purchase_order) if operation != 'post' else None
     old_revision = revision(s, old_header) if old_header else None
     meta = _version(s, old_header, inp.expected_version) if old_header else None
@@ -740,7 +758,7 @@ def prepare(s, ctx, inp, operation):
         **summary(s, header, rev), revision=revision_output(s, rev, pending), conversion=None,
         warnings=warnings, changed_fields=changed_fields)
     plan = Plan(view, dict(input=inp, operation=operation, changed=True, header=header,
-                           before=old_header, pending=pending, sequence=sequence, event=event,
+                           before=old_header, old_revision=old_revision, pending=pending, sequence=sequence, event=event,
                            semantic=resolved['semantic'] if resolved else None))
     from bookflow.company.purchase_order_validation import validate
     validate(plan, s, ctx)
@@ -751,6 +769,13 @@ def apply(plan, ctx, s):
     # Rebuilt inside the writer transaction: references, numbering and state are only decisive
     # here, and the preview may have been prepared against an older read.
     fresh = prepare(s, ctx, plan.data['input'], plan.data['operation'])
+    return persist_prepared(fresh, ctx, s, command_name='purchase-order ' + plan.data['operation'])
+
+
+def persist_prepared(fresh, ctx, s, *, command_name):
+    """Persist an authorized native aggregate inside its caller's write transaction."""
+    from bookflow.company.approvals import validate_native_seal
+    validate_native_seal(s, fresh, target='purchase_order')
     from bookflow.company.purchase_order_validation import validate
     validate(fresh, s, ctx)
     if not fresh.data['changed']:
@@ -763,7 +788,7 @@ def apply(plan, ctx, s):
         touched.extend(Touched(kind, row[key], 'create', None, 1, effects.decoded(row), db='company')
                        for row in pending[table])
     summary_text = f"{data['operation']} purchase order {header['number']}"
-    audit.write_event_to(s.company, ctx, 'purchase-order ' + data['operation'], summary_text, touched,
+    audit.write_event_to(s.company, ctx, command_name, summary_text, touched,
                          actor_id=s.actor.id, actor_kind=s.actor.kind,
                          directive_code=getattr(s, 'directive_code', None), event_id=data['event'])
     if old:

@@ -42,20 +42,20 @@ def register(name, model, output, planner, capability, role, description, write=
 
 
 approval_submit=register('purchase-draft submit',m.SubmitInput,m.RequestOutput,plan_submit,'approval.prepare','standard',
-    'Submit the exact saved bill revision to the published one-step Review policy. Freezes commercial and source facts; posts nothing. Use operation_key and reason.',True)
+    'Submit the exact saved purchase revision to the published one-step Review policy. Freezes commercial and source facts; posts nothing. Use operation_key and reason.',True)
 approval_withdraw=register('purchase-draft withdraw',m.WithdrawInput,dm.DraftOutput,plan_withdraw,'approval.prepare','standard',
     'Withdraw pending or approved work using exact draft and request versions. Retains decisions and returns to draft. Approved withdrawal requires confirm=true after preview.',True)
 approval_commit=register('purchase-draft commit',m.CommitInput,m.CommitOutput,plan_commit,'approval.prepare','standard',
-    'Post an approved bill or commit a saved draft with approvals off. Revalidates exact source and commercial evidence and current native posting rights; creates one reversible batch. Supply request version when approved.',True)
+    'Release an approved purchase order, post an approved bill, or commit a saved draft with approvals off. Revalidates exact source and commercial evidence and current native posting rights; creates one reversible batch. Supply request version when approved.',True)
 approval_decide=register('approval decide',m.DecideInput,m.RequestOutput,plan_decide,'approval.decide','standard',
     'Approve or return the assigned Review step at its exact request version. Reason required. Self-review is refused by actor and principal unless captured policy allows it. Approval posts nothing.',True)
 approval_show=register('approval show',m.RequestInput,m.RequestOutput,plan_show,'approval.read','standard','Show captured approval steps and attributed history.')
 approval_history=register('approval history',m.RequestInput,m.RequestOutput,plan_history,'approval.read','standard','Read immutable submission, decision, withdrawal, commit and reversal evidence.')
 approval_policy_create=register('approval-policy create',m.PolicyCreateInput,m.PolicyOutput,plan_policy_create,'approval.manage','standard',
-    'Save a simple bill Review policy with explicit eligible company member user IDs. Does not enable approvals until published. allow_self defaults false.',True)
+    'Save a simple purchase Review policy with explicit eligible company member user IDs. Does not enable approvals until published. allow_self defaults false.',True)
 approval_policy_update=register('approval-policy update',m.PolicyUpdateInput,m.PolicyOutput,plan_policy_update,'approval.manage','standard',
     'Save a replacement simple policy at its exact version. Published evidence and pending requests retain their captured policy.',True)
 approval_policy_publish=register('approval-policy publish',m.PolicyPublishInput,m.PolicyOutput,plan_policy_publish,'approval.manage','standard',
-    'Publish the exact policy revision and its bill approval switch. Requires company admin plus approval.manage and confirm=true after preview. Disabling affects future submissions only.',True)
-approval_policy_show=register('approval-policy show',m.PolicyInput,m.PolicyOutput,plan_policy_show,'approval.read','standard','Show a simple bill policy and its current saved revision.')
-approval_policy_list=register('approval-policy list',m.PolicyListInput,m.PolicyListOutput,plan_policy_list,'approval.read','standard','Page bill policies in stable ID order.')
+    'Publish the exact policy revision and its target approval switch. Requires company admin plus approval.manage and confirm=true after preview. Disabling affects future submissions only.',True)
+approval_policy_show=register('approval-policy show',m.PolicyInput,m.PolicyOutput,plan_policy_show,'approval.read','standard','Show a simple purchase policy and its current saved revision.')
+approval_policy_list=register('approval-policy list',m.PolicyListInput,m.PolicyListOutput,plan_policy_list,'approval.read','standard','Page purchase policies in stable ID order.')
