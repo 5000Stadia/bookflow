@@ -24,9 +24,11 @@
   const DEFAULT_ORDER = ['native', 'zxing-wasm'];
   const KEY_ORDER = 'bookflow.scan.decoders';
   const KEY_SOUND = 'bookflow.scan.sound';
+  const KEY_BEEP = 'bookflow.scan.beep';     // which found-item beep this device plays (an index into BEEPS)
   const KEY_WHY = 'bookflow.scan.photo-why-shown';
   // Tuning for the phone trial.
   const FRAME_MS = 125;            // about 8 decodes a second
+  const AIM_MARGIN = 0.06;         // how far past the aiming window's border a code may reach, as a share of its short side
   const LEFT_FRAME_DECODES = 5;    // a code unread in 5 decodes in a row (about 0.6 s) has left the frame
   const IDLE_MS = 60000;           // a minute with no code stops the camera
   const BROKEN_DETECTS = 10;       // a decoder whose detect() throws this many times in a row is passed over
@@ -143,6 +145,7 @@
         <button type="button" data-camera-restart hidden>Start again</button>
         <button type="button" data-camera-torch aria-pressed="false" hidden>Torch</button>
         <label class="camera-sound"><input type="checkbox" data-camera-sound> Sound</label>
+        <label class="camera-beep">Beep <select data-camera-beep></select></label>
         <label class="camera-decoder">Decoder <select data-camera-choice></select></label>
         <span class="camera-using" data-camera-decoder></span>
         <button type="button" data-camera-close>Close</button>
@@ -153,6 +156,12 @@
     state.overlay = overlay;
     part('sound').checked = stored.get('localStorage', KEY_SOUND) !== 'off';
     part('sound').addEventListener('change', event => stored.set('localStorage', KEY_SOUND, event.target.checked ? null : 'off'));
+    part('beep').innerHTML = BEEPS.map(([name], index) => `<option value="${index}">${index + 1}. ${escape(name)}</option>`).join('');
+    part('beep').value = String(beepChoice());
+    part('beep').addEventListener('change', event => {
+      stored.set('localStorage', KEY_BEEP, event.target.value);
+      if (state.audio) { try { play(BEEPS[beepChoice()][1]); } catch (error) { /* no audio output */ } }
+    });
     part('close').addEventListener('click', close);
     part('restart').addEventListener('click', () => { if (state.mode === 'live') startLive(); });
     part('photo').addEventListener('click', () => part('file').click());
@@ -330,6 +339,32 @@
     } catch (error) { part('torch').hidden = true; }
   }
 
+  // Only what is inside the aiming window is read: the rest of the picture is there to help the person aim. The
+  // window's place on the screen is mapped back to the camera's own pixels (the video is cropped to fill its box) and
+  // that part alone is handed to the decoder, with a small margin so a code touching the border still reads.
+  function aimed(video) {
+    const frame = state.overlay.querySelector('.camera-frame');
+    const box = video.getBoundingClientRect();
+    const aim = frame && frame.getBoundingClientRect();
+    if (!aim || !box.width || !box.height || !aim.width || !aim.height) return video;
+    const scale = Math.max(box.width / video.videoWidth, box.height / video.videoHeight);
+    const left = (box.width - video.videoWidth * scale) / 2;
+    const top = (box.height - video.videoHeight * scale) / 2;
+    const margin = Math.min(aim.width, aim.height) * AIM_MARGIN;
+    const x0 = Math.max(0, (aim.left - box.left - margin - left) / scale);
+    const y0 = Math.max(0, (aim.top - box.top - margin - top) / scale);
+    const x1 = Math.min(video.videoWidth, (aim.right - box.left + margin - left) / scale);
+    const y1 = Math.min(video.videoHeight, (aim.bottom - box.top + margin - top) / scale);
+    const width = Math.round(x1 - x0);
+    const height = Math.round(y1 - y0);
+    if (width < 16 || height < 16) return video;
+    const canvas = state.aim || (state.aim = document.createElement('canvas'));
+    if (canvas.width !== width) canvas.width = width;
+    if (canvas.height !== height) canvas.height = height;
+    canvas.getContext('2d', {willReadFrequently: true}).drawImage(video, x0, y0, width, height, 0, 0, width, height);
+    return canvas;
+  }
+
   async function tick(mine) {
     if (!state.running || mine !== state.start) return;
     const started = performance.now();
@@ -338,7 +373,7 @@
     let codes = [];
     if (video.readyState >= 2 && video.videoWidth) {
       try {
-        codes = await decoder.detect(video);
+        codes = await decoder.detect(aimed(video));
         state.failures = 0;
       } catch (error) {
         codes = [];
@@ -504,38 +539,60 @@
   });
 
   // ---------------------------------------------------------------- sound and vibration
-  // One beep: a single pitch with a clean start and end, optionally lifted into from a little below (a rising beep
-  // sounds cheerful; a falling one sounds sad, so nothing here falls). No audio file.
-  function beep(frequency, length, {from = 0, level = 0.2} = {}) {
+  // A sound is a few voices: each one pitch (optionally lifted into from `from`), either held and cut clean or, with
+  // `pluck`, struck and left to die away. Nothing falls in pitch: a falling beep sounds sad. No audio files.
+  function play(voices) {
     const audio = state.audio;
-    const start = audio.currentTime;
-    const envelope = audio.createGain();
-    envelope.gain.setValueAtTime(0.0001, start);
-    envelope.gain.exponentialRampToValueAtTime(level, start + 0.004);
-    envelope.gain.setValueAtTime(level, start + length - 0.02);
-    envelope.gain.exponentialRampToValueAtTime(0.0001, start + length);
-    envelope.connect(audio.destination);
-    const oscillator = audio.createOscillator();
-    oscillator.type = 'triangle';
-    oscillator.frequency.value = frequency;
-    if (from) {
-      oscillator.frequency.setValueAtTime(from, start);
-      oscillator.frequency.exponentialRampToValueAtTime(frequency, start + 0.035);
+    const now = audio.currentTime;
+    for (const {type = 'sine', f, from = 0, rise = 0.035, at = 0, len, level = 0.2, pluck = false} of voices) {
+      const start = now + at;
+      const envelope = audio.createGain();
+      envelope.gain.setValueAtTime(0.0001, start);
+      envelope.gain.exponentialRampToValueAtTime(level, start + 0.004);
+      if (!pluck) envelope.gain.setValueAtTime(level, start + Math.max(0.005, len - 0.02));
+      envelope.gain.exponentialRampToValueAtTime(0.0001, start + len);
+      envelope.connect(audio.destination);
+      const oscillator = audio.createOscillator();
+      oscillator.type = type;
+      oscillator.frequency.value = f;
+      if (from) {
+        oscillator.frequency.setValueAtTime(from, start);
+        oscillator.frequency.exponentialRampToValueAtTime(f, start + rise);
+      }
+      oscillator.connect(envelope);
+      oscillator.start(start);
+      oscillator.stop(start + len + 0.02);
     }
-    oscillator.connect(envelope);
-    oscillator.start(start);
-    oscillator.stop(start + length + 0.02);
   }
 
-  // One sound a scan. A found item: the familiar high checkout beep (2,093 Hz, 110 ms), lifted into from a tone below
-  // so it sounds bright, and a 40 ms vibration. An unknown code: one lower beep that also rises (784 to 880 Hz,
-  // 160 ms) and a longer double buzz. Sound follows this device's toggle; a phone on silent still vibrates.
+  // The found-item beeps this device can choose from (the overlay's Beep menu); the choice is kept per device.
+  const BEEPS = [
+    ['Classic scanner', [{type: 'square', f: 2000, len: 0.08, level: 0.07}]],
+    ['Soft and pure', [{f: 2093, len: 0.1}]],
+    ['Lifted', [{type: 'triangle', f: 2093, from: 1865, len: 0.11}]],
+    ['Bell', [{f: 2093, len: 0.2, pluck: true, level: 0.25}, {f: 4186, len: 0.12, pluck: true, level: 0.05}]],
+    ['Two notes up', [{type: 'triangle', f: 1568, len: 0.055}, {type: 'triangle', f: 2093, at: 0.055, len: 0.075}]],
+    ['Pop', [{f: 2100, from: 1400, rise: 0.09, len: 0.1}]],
+    ['Marimba', [{f: 1047, len: 0.13, pluck: true, level: 0.3}, {f: 4188, len: 0.03, pluck: true, level: 0.08}]],
+    ['Kalimba', [{f: 1319, len: 0.17, pluck: true, level: 0.28}, {f: 2638, len: 0.1, pluck: true, level: 0.07}]],
+    ['Happy chord', [{type: 'triangle', f: 1760, len: 0.11, level: 0.13}, {type: 'triangle', f: 2217, len: 0.11, level: 0.13}]],
+    ['Sparkle', [{f: 2637, len: 0.045}, {f: 3520, at: 0.045, len: 0.07}]],
+  ];
+  const DEFAULT_BEEP = 2;
+  const UNKNOWN_BEEP = [{type: 'triangle', f: 880, from: 784, len: 0.16}];
+  function beepChoice() {
+    const index = Number.parseInt(stored.get('localStorage', KEY_BEEP), 10);
+    return index >= 0 && index < BEEPS.length ? index : DEFAULT_BEEP;
+  }
+
+  // One sound a scan. A found item: this device's chosen beep (by default the familiar high checkout beep, lifted
+  // into from a tone below) and a 40 ms vibration. An unknown code: one lower beep that also rises and a longer
+  // double buzz. Sound follows this device's toggle; a phone on silent still vibrates.
   function signal(found, code) {
     const sound = !state.overlay || part('sound').checked;
     if (sound && state.audio) {
       try {
-        if (found) beep(2093, 0.11, {from: 1865});
-        else beep(880, 0.16, {from: 784});
+        play(found ? BEEPS[beepChoice()][1] : UNKNOWN_BEEP);
       } catch (error) { /* no audio output */ }
     }
     try { navigator.vibrate?.(found ? 40 : [120, 80, 120]); } catch (error) { /* not supported */ }

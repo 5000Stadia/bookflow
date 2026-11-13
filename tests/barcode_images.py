@@ -59,7 +59,18 @@ def photo(path: Path, code: str) -> Path:
     return path
 
 
-def y4m(path: Path, segments: list[tuple[str | None, int]], *, size: tuple[int, int] = (320, 240), fps: int = 5) -> Path:
+def _centred(code, size: tuple[int, int]) -> Image.Image:
+    """The label (or labels) in the middle of an otherwise white picture, inside the camera view's aiming window: the
+    camera reads only what is in that window."""
+    width, height = size
+    inner = (width * 5 // 8, height * 2 // 5)
+    label = stacked(code, inner) if isinstance(code, tuple) else ean13_image(code, inner)
+    image = Image.new('L', size, 255)
+    image.paste(label, ((width - inner[0]) // 2, (height - inner[1]) // 2))
+    return image
+
+
+def y4m(path: Path, segments: list[tuple[str | None, int]], *, size: tuple[int, int] = (640, 480), fps: int = 5) -> Path:
     """A grey 4:2:0 Y4M video: each segment is (a code, a tuple of codes shown together, or None for a blank frame,
     number of frames)."""
     width, height = size
@@ -70,8 +81,7 @@ def y4m(path: Path, segments: list[tuple[str | None, int]], *, size: tuple[int, 
         out.write(f'YUV4MPEG2 W{width} H{height} F{fps}:1 Ip A1:1 C420jpeg\n'.encode())
         for code, count in segments:
             if code not in frames:
-                frames[code] = (stacked(code, size) if isinstance(code, tuple) else ean13_image(code, size)).tobytes() \
-                    if code else blank
+                frames[code] = _centred(code, size).tobytes() if code else blank
             for _ in range(count):
                 out.write(b'FRAME\n' + frames[code] + chroma)
     return path

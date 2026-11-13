@@ -18,6 +18,7 @@
 .camera-controls button[aria-pressed="true"] { background: #f5d76e; color: #111; }
 .camera-controls label { display: inline-flex; align-items: center; gap: .3rem; min-height: 44px; }
 .camera-controls select { max-width: 13rem; min-height: 36px; }
+.camera-frame { box-shadow: 0 0 0 999px rgba(0, 0, 0, .5); }
 .camera-using { color: #bbb; font-size: .85rem; }
 .camera-controls [data-camera-close] { margin-left: auto; }
 .camera-overlay[data-camera-mode="photo"] { height: auto; min-height: 0; }
